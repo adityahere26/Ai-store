@@ -117,6 +117,7 @@ export default function Builder() {
   const [sheet, setSheet] = useState<{ kind: "bio" } | { kind: "product"; index: number } | null>(null);
   const [busy, setBusy] = useState<{ bio?: boolean; product?: number | null; all?: boolean }>({});
   const [publishing, setPublishing] = useState(false);
+  const [device, setDevice] = useState<"desktop" | "phone">("desktop");
 
   useEffect(() => {
     const d = loadDraft();
@@ -300,98 +301,197 @@ export default function Builder() {
       {stage === "generating" && <GeneratingScreen handle={handle.trim()} />}
 
       {stage === "edit" && draft && (
-        <>
+        <div className="min-h-dvh lg:bg-[#f1f0f8]">
+          {/* Top bar */}
           <div className="sticky top-0 z-30 bg-app-night text-white">
-            <div className="mx-auto flex max-w-md items-center justify-between px-4 py-2.5">
-              <button onClick={startOver} className="min-h-10 text-sm font-medium text-white/70">
-                ← Start over
-              </button>
-              <span className="rounded-full bg-white/10 px-3 py-1 text-[12px] font-medium text-white/80">
-                {draft.dirty || !draft.publish ? "● Draft · saved on this phone" : "● Live"}
-              </span>
-              <button onClick={undo} disabled={!history.length} className="min-h-10 text-sm font-semibold text-white disabled:opacity-30">
-                ↶ Undo
-              </button>
-            </div>
-          </div>
-
-          <div className="mx-auto max-w-md px-4 pt-4">
-            <p className="rounded-2xl bg-app-sky px-4 py-3 text-[14px] leading-snug text-app-ink">
-              {draft.source.usedInstagram
-                ? `Built from your Instagram${draft.source.captions ? ` bio and ${draft.source.captions} recent posts` : " profile"}${draft.ctx.description ? " plus your description" : ""}.`
-                : "Built from your description."}{" "}
-              <span className="font-semibold">Tap any section to edit or rewrite it.</span>
-            </p>
-
-            {draft.assumptions.length > 0 && (
-              <div className="mt-3 rounded-2xl bg-app-blush px-4 py-3 text-[14px] text-app-ink">
-                <p className="font-semibold">🤔 A few guesses we made. Tap a section to fix them:</p>
-                <ul className="mt-1 list-disc space-y-0.5 pl-5">
-                  {draft.assumptions.map((a, i) => (
-                    <li key={i}>{a}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2" role="radiogroup" aria-label="Page style">
-                {THEMES.map((t) => (
-                  <button
-                    key={t}
-                    role="radio"
-                    aria-checked={draft.storefront.theme === t}
-                    aria-label={THEME_SWATCH[t].name}
-                    onClick={() => updateStore((s) => ({ ...s, theme: t }))}
-                    className={`grid h-10 w-10 place-items-center rounded-full border-2 transition ${
-                      draft.storefront.theme === t ? "border-app-accent ring-2 ring-app-accent/20" : "border-app-line"
-                    }`}
-                    style={{ background: THEME_SWATCH[t].bg }}
-                  >
-                    <span className="h-3.5 w-3.5 rounded-full" style={{ background: THEME_SWATCH[t].dot }} />
-                  </button>
-                ))}
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <span className="text-app-muted">Language</span>
-                <select
-                  value={draft.storefront.language}
-                  disabled={busy.all}
-                  onChange={(e) => changeLanguage(e.target.value as Language)}
-                  className="min-h-10 rounded-full border border-app-line bg-app-surface px-3 font-medium"
-                >
-                  {(Object.keys(LANG_LABEL) as Language[]).map((l) => (
-                    <option key={l} value={l}>
-                      {LANG_LABEL[l]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </div>
-
-          <div className="mx-auto mt-4 max-w-md overflow-hidden rounded-t-[28px] border border-b-0 border-app-line shadow-[0_-4px_30px_rgba(22,16,30,0.06)]">
-            <StorefrontView
-              storefront={draft.storefront}
-              mode="edit"
-              busy={busy}
-              onEditBio={() => setSheet({ kind: "bio" })}
-              onEditProduct={(index) => setSheet({ kind: "product", index })}
-            />
-            <div className={`theme-${safeTheme(draft.storefront.theme)} bg-sf-bg px-4 pb-32`}>
-              {draft.storefront.products.length < 4 && (
-                <button
-                  onClick={() => addProduct()}
-                  disabled={busy.product != null || busy.all}
-                  className="w-full rounded-[20px] border-2 border-dashed border-sf-line py-4 text-sm font-semibold text-sf-muted"
-                >
-                  {busy.product === draft.storefront.products.length ? "✨ Thinking of another idea…" : "+ Suggest another product"}
+            <div className="mx-auto flex max-w-md items-center justify-between px-4 py-2.5 lg:max-w-7xl lg:px-8 lg:py-3">
+              <div className="flex items-center gap-6">
+                <p className="hidden text-[17px] font-semibold tracking-tight lg:block">
+                  <span className="text-app-accent-2">✦</span> Storefront AI
+                </p>
+                <button onClick={startOver} className="min-h-10 text-sm font-medium text-white/70 hover:text-white">
+                  ← Start over
                 </button>
-              )}
+              </div>
+              <span className="rounded-full bg-white/10 px-3 py-1 text-[12px] font-medium text-white/80">
+                {draft.dirty || !draft.publish ? (
+                  <>
+                    ● Draft<span className="hidden sm:inline"> · saved on this device</span>
+                  </>
+                ) : (
+                  "● Live"
+                )}
+              </span>
+              <div className="flex items-center gap-3">
+                <button onClick={undo} disabled={!history.length} className="min-h-10 text-sm font-semibold text-white disabled:opacity-30">
+                  ↶ Undo
+                </button>
+                <button
+                  onClick={publish}
+                  disabled={publishing || busy.all}
+                  className="hidden min-h-10 rounded-full bg-app-accent px-5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60 lg:block"
+                >
+                  {publishing ? "Publishing…" : draft.publish ? "Update store →" : "Publish store →"}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-app-line bg-app-surface/95 backdrop-blur">
+          <div className="mx-auto max-w-md lg:grid lg:max-w-7xl lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start lg:gap-8 lg:px-8 lg:py-8">
+            {/* Controls: inline on mobile, sticky sidebar on desktop */}
+            <aside className="px-4 pt-4 lg:sticky lg:top-[88px] lg:px-0 lg:pt-0">
+              <div className="lg:rounded-[24px] lg:bg-app-surface lg:p-5 lg:shadow-[0_8px_30px_rgba(22,16,30,0.06)]">
+                <h2 className="tight mb-4 hidden text-[28px] leading-none font-medium lg:block">
+                  Your <span className="font-serif-i text-[32px]">store</span>
+                </h2>
+                <p className="rounded-2xl bg-app-sky px-4 py-3 text-[14px] leading-snug text-app-ink">
+                  {draft.source.usedInstagram
+                    ? `Built from your Instagram${draft.source.captions ? ` bio and ${draft.source.captions} recent posts` : " profile"}${draft.ctx.description ? " plus your description" : ""}.`
+                    : "Built from your description."}{" "}
+                  <span className="font-semibold">
+                    <span className="lg:hidden">Tap</span>
+                    <span className="hidden lg:inline">Click</span> any section to edit or rewrite it.
+                  </span>
+                </p>
+
+                {draft.assumptions.length > 0 && (
+                  <div className="mt-3 rounded-2xl bg-app-blush px-4 py-3 text-[14px] text-app-ink">
+                    <p className="font-semibold">🤔 A few guesses we made. Fix any that are wrong:</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                      {draft.assumptions.map((a, i) => (
+                        <li key={i}>{a}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="mt-4 flex items-center justify-between gap-3 lg:flex-col lg:items-stretch lg:gap-4">
+                  <div>
+                    <p className="mb-2 hidden text-sm font-semibold lg:block">Page style</p>
+                    <div className="flex items-center gap-2" role="radiogroup" aria-label="Page style">
+                      {THEMES.map((t) => (
+                        <button
+                          key={t}
+                          role="radio"
+                          aria-checked={draft.storefront.theme === t}
+                          aria-label={THEME_SWATCH[t].name}
+                          title={THEME_SWATCH[t].name}
+                          onClick={() => updateStore((s) => ({ ...s, theme: t }))}
+                          className={`flex items-center gap-2 rounded-full border-2 transition lg:flex-1 lg:px-2 lg:py-1.5 ${
+                            draft.storefront.theme === t ? "border-app-accent ring-2 ring-app-accent/20" : "border-app-line hover:border-app-muted"
+                          }`}
+                        >
+                          <span className="grid h-9 w-9 place-items-center rounded-full lg:h-6 lg:w-6" style={{ background: THEME_SWATCH[t].bg }}>
+                            <span className="h-3.5 w-3.5 rounded-full lg:h-2.5 lg:w-2.5" style={{ background: THEME_SWATCH[t].dot }} />
+                          </span>
+                          <span className="hidden pr-1 text-[13px] font-medium lg:inline">{THEME_SWATCH[t].name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm lg:flex-col lg:items-stretch">
+                    <span className="text-app-muted lg:font-semibold lg:text-app-ink">Language</span>
+                    <select
+                      value={draft.storefront.language}
+                      disabled={busy.all}
+                      onChange={(e) => changeLanguage(e.target.value as Language)}
+                      className="min-h-10 rounded-full border border-app-line bg-app-surface px-3 font-medium"
+                    >
+                      {(Object.keys(LANG_LABEL) as Language[]).map((l) => (
+                        <option key={l} value={l}>
+                          {LANG_LABEL[l]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {/* Desktop actions */}
+                <div className="mt-6 hidden flex-col gap-2 border-t border-app-line pt-5 lg:flex">
+                  <button
+                    onClick={publish}
+                    disabled={publishing || busy.all}
+                    className="min-h-12 rounded-full bg-app-accent text-[15px] font-semibold text-white shadow-[0_6px_20px_rgba(0,89,255,0.35)] transition hover:brightness-110 disabled:opacity-60"
+                  >
+                    {publishing ? "Publishing…" : draft.publish ? "Update store →" : "Publish store →"}
+                  </button>
+                  <button
+                    onClick={() => regenerate({ kind: "all" })}
+                    disabled={busy.all}
+                    className="min-h-12 rounded-full border border-app-line text-[15px] font-semibold transition hover:bg-app-tint disabled:opacity-50"
+                  >
+                    {busy.all ? "Rewriting…" : "↻ Regenerate all"}
+                  </button>
+                  {draft.publish && (
+                    <button onClick={() => setStage("published")} className="min-h-10 text-sm font-medium text-app-accent">
+                      View share link &amp; stats
+                    </button>
+                  )}
+                </div>
+              </div>
+            </aside>
+
+            {/* Preview */}
+            <section className="mt-4 lg:mt-0">
+              <div className="mb-4 hidden items-center justify-between lg:flex">
+                <p className="text-sm text-app-muted">Live preview, exactly what visitors see</p>
+                <div className="flex rounded-full bg-app-surface p-1 shadow-sm" role="radiogroup" aria-label="Preview size">
+                  {(["desktop", "phone"] as const).map((d) => (
+                    <button
+                      key={d}
+                      role="radio"
+                      aria-checked={device === d}
+                      onClick={() => setDevice(d)}
+                      className={`min-h-9 rounded-full px-4 text-sm font-medium transition ${device === d ? "bg-app-ink text-white" : "text-app-muted hover:text-app-ink"}`}
+                    >
+                      {d === "desktop" ? "🖥 Desktop" : "📱 Phone"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                className={`mx-auto overflow-hidden rounded-t-[28px] border border-b-0 border-app-line shadow-[0_-4px_30px_rgba(22,16,30,0.06)] transition-[max-width] duration-300 lg:border-b lg:shadow-[0_20px_60px_rgba(22,16,30,0.12)] ${
+                  device === "phone" ? "lg:max-w-[400px] lg:rounded-[44px] lg:border-[10px] lg:border-app-night" : "lg:max-w-none lg:rounded-[20px]"
+                }`}
+              >
+                {device === "desktop" && (
+                  <div className="hidden items-center gap-3 border-b border-app-line bg-app-surface px-4 py-2.5 lg:flex">
+                    <span className="flex gap-1.5" aria-hidden>
+                      <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+                      <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
+                      <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+                    </span>
+                    <span className="flex-1 truncate rounded-full bg-app-tint px-4 py-1 text-center text-[13px] text-app-muted">
+                      🔒 your-store-link/s/{draft.publish?.slug ?? (draft.storefront.handle || "your-name")}
+                    </span>
+                  </div>
+                )}
+                <StorefrontView
+                  storefront={draft.storefront}
+                  mode="edit"
+                  busy={busy}
+                  onEditBio={() => setSheet({ kind: "bio" })}
+                  onEditProduct={(index) => setSheet({ kind: "product", index })}
+                  afterProducts={
+                    draft.storefront.products.length < 4 && (
+                      <button
+                        onClick={() => addProduct()}
+                        disabled={busy.product != null || busy.all}
+                        className="mt-5 w-full rounded-[20px] border-2 border-dashed border-sf-line py-4 text-sm font-semibold text-sf-muted transition hover:border-sf-muted"
+                      >
+                        {busy.product === draft.storefront.products.length ? "✨ Thinking of another idea…" : "+ Suggest another product"}
+                      </button>
+                    )
+                  }
+                />
+                <div className={`theme-${safeTheme(draft.storefront.theme)} h-24 bg-sf-bg lg:h-0`} aria-hidden />
+              </div>
+            </section>
+          </div>
+
+          {/* Mobile action bar */}
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-app-line bg-app-surface/95 backdrop-blur lg:hidden">
             <div className="mx-auto flex max-w-md gap-2 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
               <button
                 onClick={() => regenerate({ kind: "all" })}
@@ -436,7 +536,7 @@ export default function Builder() {
               onClose={() => setSheet(null)}
             />
           )}
-        </>
+        </div>
       )}
 
       {stage === "published" && draft?.publish && (
@@ -478,6 +578,12 @@ export default function Builder() {
 
 /* ---------------- Input screen ---------------- */
 
+const STEPS = [
+  { bg: "bg-app-blush", n: "01", t: "What to sell", d: "2 to 4 product ideas your audience already trusts you for." },
+  { bg: "bg-app-mint", n: "02", t: "How to price it", d: "INR prices that fit your niche and audience size, with the reason." },
+  { bg: "bg-app-sky", n: "03", t: "What to write", d: "Bio and product pages in English, Hinglish or Hindi. Edit anything." },
+];
+
 function InputScreen(props: {
   handle: string;
   setHandle: (s: string) => void;
@@ -496,171 +602,189 @@ function InputScreen(props: {
   const { handle, setHandle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved } = props;
   const canSubmit = handle.trim() || description.trim();
   return (
-    <main className="min-h-dvh bg-app-tint">
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-app-night px-5 pt-5 pb-20 text-white">
+    <main className="min-h-dvh overflow-x-clip bg-app-tint">
+      {/* Dark hero band. On mobile the form card hangs over its bottom edge; on desktop it sits beside the headline. */}
+      <div className="relative bg-app-night text-white">
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full opacity-40 blur-3xl"
+          className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full opacity-40 blur-3xl lg:h-[520px] lg:w-[520px] lg:opacity-30"
           style={{ background: "radial-gradient(circle, #0099ff 0%, transparent 70%)" }}
         />
-        <div className="relative mx-auto max-w-md">
-          <div className="flex items-center justify-between">
-            <p className="text-[17px] font-semibold tracking-tight">
-              <span className="text-app-accent-2">✦</span> Storefront AI
+        <nav className="relative mx-auto flex max-w-md items-center justify-between px-5 pt-5 lg:max-w-6xl lg:px-8 lg:pt-7">
+          <p className="text-[17px] font-semibold tracking-tight lg:text-[20px]">
+            <span className="text-app-accent-2">✦</span> Storefront AI
+          </p>
+          <div className="flex items-center gap-6">
+            <span className="hidden text-sm text-white/60 lg:inline">For creators, coaches &amp; educators</span>
+            <span className="rounded-full border border-white/15 px-3 py-1 text-[12px] text-white/70 lg:text-[13px]">Free · no sign-up</span>
+          </div>
+        </nav>
+
+        <div className="relative mx-auto max-w-md lg:grid lg:max-w-6xl lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-16 lg:px-8 lg:pt-12 lg:pb-24">
+          {/* Headline */}
+          <section className="px-5 pt-8 pb-8 lg:px-0 lg:pt-0 lg:pb-0">
+            <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[12.5px] font-medium text-white/85">
+              <span className="rounded-full bg-app-accent px-2 py-0.5 text-[11px] font-semibold text-white">New</span>
+              AI sets up your store for you
             </p>
-            <span className="rounded-full border border-white/15 px-3 py-1 text-[12px] text-white/70">Free · no sign-up</span>
-          </div>
+            <h1 className="tight mt-4 text-[40px] leading-[1.02] font-medium lg:mt-6 lg:text-[68px] lg:leading-[0.98]">
+              Your store,
+              <br />
+              <span className="font-serif-i text-[46px] text-[#cfe6ff] lg:text-[78px]">ready in a minute.</span>
+            </h1>
+            <p className="mt-4 text-[16px] leading-relaxed text-white/70 lg:mt-6 lg:max-w-lg lg:text-[19px]">
+              Tell us who you are. We&apos;ll suggest what to sell, price it for Indian buyers and write your page. You can change
+              everything.
+            </p>
+            <ul className="mt-8 hidden flex-wrap gap-x-6 gap-y-2 text-[15px] text-white/75 lg:flex">
+              {["Products that fit your niche", "₹ pricing with the reason", "English, Hinglish, हिंदी"].map((t) => (
+                <li key={t} className="flex items-center gap-2">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-[#00b67a] text-[11px] font-bold text-white">✓</span>
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </section>
 
-          <p className="mt-8 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[12.5px] font-medium text-white/85">
-            <span className="rounded-full bg-app-accent px-2 py-0.5 text-[11px] font-semibold text-white">New</span>
-            AI sets up your store for you
-          </p>
-          <h1 className="tight mt-4 text-[40px] leading-[1.02] font-medium">
-            Your store,
-            <br />
-            <span className="font-serif-i text-[46px] text-[#cfe6ff]">ready in a minute.</span>
-          </h1>
-          <p className="mt-4 text-[16px] leading-relaxed text-white/70">
-            Tell us who you are. We&apos;ll suggest what to sell, price it for Indian buyers and write your page. You can change
-            everything.
-          </p>
+          {/* Form column */}
+          <section className="relative px-4 pb-6 lg:px-0 lg:pb-0">
+            {/* Light panel behind the lower part of the card (mobile/tablet only) */}
+            <div aria-hidden className="absolute top-12 bottom-0 left-1/2 w-screen -translate-x-1/2 bg-app-tint lg:hidden" />
+
+            <div className="relative text-app-ink">
+              {saved && (
+                <div className="rise mb-3 flex items-center justify-between gap-3 rounded-[20px] bg-app-surface p-4 shadow-[0_8px_30px_rgba(22,16,30,0.10)]">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">Continue your store?</p>
+                    <p className="truncate text-sm text-app-muted">{saved.storefront.displayName}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button onClick={props.onDiscard} className="min-h-10 rounded-full px-3 text-sm text-app-muted hover:text-app-ink">
+                      Discard
+                    </button>
+                    <button onClick={props.onResume} className="min-h-10 rounded-full bg-app-ink px-4 text-sm font-semibold text-white">
+                      Continue
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <form
+                className="flex flex-col gap-5 rounded-[24px] bg-app-surface p-5 shadow-[0_12px_40px_rgba(22,16,30,0.12)] lg:p-7 lg:shadow-[0_30px_80px_rgba(0,0,0,0.45)]"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  props.onSubmit();
+                }}
+              >
+                <div>
+                  <label htmlFor="handle" className="text-[15px] font-semibold">
+                    Instagram handle <span className="font-normal text-app-muted">(optional)</span>
+                  </label>
+                  <div
+                    className={`mt-1.5 flex items-center rounded-2xl border bg-app-tint px-4 focus-within:border-app-accent focus-within:bg-app-surface ${
+                      handleMsg ? "border-[#f0b400]" : "border-app-line"
+                    }`}
+                  >
+                    <span className="text-lg text-app-muted">@</span>
+                    <input
+                      id="handle"
+                      value={handle}
+                      onChange={(e) => setHandle(e.target.value.replace(/^@+/, ""))}
+                      placeholder="yourhandle"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      inputMode="url"
+                      maxLength={100}
+                      className="min-h-13 w-full bg-transparent px-1 text-[17px] outline-none"
+                    />
+                  </div>
+                  {handleMsg && <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{handleMsg}</p>}
+                </div>
+
+                <div className="flex items-center gap-3 text-[11px] font-semibold tracking-[0.18em] text-app-muted uppercase">
+                  <span className="h-px flex-1 bg-app-line" /> and / or <span className="h-px flex-1 bg-app-line" />
+                </div>
+
+                <div>
+                  <label htmlFor="desc" className="text-[15px] font-semibold">
+                    What do you create, and for whom?
+                  </label>
+                  {question && (
+                    <p className="rise mt-2 rounded-2xl rounded-bl-sm bg-app-accent px-4 py-2.5 text-sm text-white">💬 {question}</p>
+                  )}
+                  <textarea
+                    id="desc"
+                    ref={descRef}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="e.g. I'm a dietitian in Pune. I share easy veg recipes for weight loss."
+                    className="mt-1.5 w-full resize-none rounded-2xl border border-app-line bg-app-tint px-4 py-3 text-[16px] leading-relaxed outline-none focus:border-app-accent focus:bg-app-surface"
+                  />
+                  <div className="-mx-5 mt-2 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
+                    {EXAMPLES.map((ex) => (
+                      <button
+                        type="button"
+                        key={ex}
+                        onClick={() => setDescription(ex)}
+                        className="shrink-0 rounded-full border border-app-line bg-app-surface px-3.5 py-1.5 text-[13px] text-app-ink transition hover:border-app-accent hover:text-app-accent active:bg-app-tint"
+                      >
+                        {ex}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[15px] font-semibold">Write my page in</p>
+                  <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-full bg-app-tint p-1" role="radiogroup">
+                    {(Object.keys(LANG_LABEL) as Language[]).map((l) => (
+                      <button
+                        type="button"
+                        key={l}
+                        role="radio"
+                        aria-checked={language === l}
+                        onClick={() => setLanguage(l)}
+                        className={`min-h-10 rounded-full text-[15px] font-medium transition ${
+                          language === l ? "bg-app-ink text-white shadow" : "text-app-muted hover:text-app-ink"
+                        }`}
+                      >
+                        {LANG_LABEL[l]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!canSubmit}
+                  className="min-h-14 rounded-full bg-app-accent text-[17px] font-semibold text-white shadow-[0_8px_24px_rgba(0,89,255,0.35)] transition hover:brightness-110 active:scale-[0.99] disabled:opacity-40 disabled:shadow-none"
+                >
+                  Build my store ✨
+                </button>
+                <p className="-mt-2 text-center text-xs text-app-muted">Takes about 15 seconds</p>
+              </form>
+            </div>
+          </section>
         </div>
-      </section>
-
-      {/* Form card */}
-      <section className="relative mx-auto -mt-12 max-w-md px-4 pb-6">
-        {saved && (
-          <div className="rise mb-3 flex items-center justify-between gap-3 rounded-[20px] bg-app-surface p-4 shadow-[0_8px_30px_rgba(22,16,30,0.10)]">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold">Continue your store?</p>
-              <p className="truncate text-sm text-app-muted">{saved.storefront.displayName}</p>
-            </div>
-            <div className="flex shrink-0 gap-1">
-              <button onClick={props.onDiscard} className="min-h-10 rounded-full px-3 text-sm text-app-muted">
-                Discard
-              </button>
-              <button onClick={props.onResume} className="min-h-10 rounded-full bg-app-ink px-4 text-sm font-semibold text-white">
-                Continue
-              </button>
-            </div>
-          </div>
-        )}
-
-        <form
-          className="flex flex-col gap-5 rounded-[24px] bg-app-surface p-5 shadow-[0_12px_40px_rgba(22,16,30,0.12)]"
-          onSubmit={(e) => {
-            e.preventDefault();
-            props.onSubmit();
-          }}
-        >
-          <div>
-            <label htmlFor="handle" className="text-[15px] font-semibold">
-              Instagram handle <span className="font-normal text-app-muted">(optional)</span>
-            </label>
-            <div
-              className={`mt-1.5 flex items-center rounded-2xl border bg-app-tint px-4 focus-within:border-app-accent focus-within:bg-app-surface ${
-                handleMsg ? "border-[#f0b400]" : "border-app-line"
-              }`}
-            >
-              <span className="text-lg text-app-muted">@</span>
-              <input
-                id="handle"
-                value={handle}
-                onChange={(e) => setHandle(e.target.value.replace(/^@+/, ""))}
-                placeholder="yourhandle"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                inputMode="url"
-                maxLength={100}
-                className="min-h-13 w-full bg-transparent px-1 text-[17px] outline-none"
-              />
-            </div>
-            {handleMsg && <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{handleMsg}</p>}
-          </div>
-
-          <div className="flex items-center gap-3 text-[11px] font-semibold tracking-[0.18em] text-app-muted uppercase">
-            <span className="h-px flex-1 bg-app-line" /> and / or <span className="h-px flex-1 bg-app-line" />
-          </div>
-
-          <div>
-            <label htmlFor="desc" className="text-[15px] font-semibold">
-              What do you create, and for whom?
-            </label>
-            {question && (
-              <p className="rise mt-2 rounded-2xl rounded-bl-sm bg-app-accent px-4 py-2.5 text-sm text-white">💬 {question}</p>
-            )}
-            <textarea
-              id="desc"
-              ref={descRef}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              maxLength={1000}
-              placeholder="e.g. I'm a dietitian in Pune. I share easy veg recipes for weight loss."
-              className="mt-1.5 w-full resize-none rounded-2xl border border-app-line bg-app-tint px-4 py-3 text-[16px] leading-relaxed outline-none focus:border-app-accent focus:bg-app-surface"
-            />
-            <div className="-mx-5 mt-2 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
-              {EXAMPLES.map((ex) => (
-                <button
-                  type="button"
-                  key={ex}
-                  onClick={() => setDescription(ex)}
-                  className="shrink-0 rounded-full border border-app-line bg-app-surface px-3.5 py-1.5 text-[13px] text-app-ink active:bg-app-tint"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[15px] font-semibold">Write my page in</p>
-            <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-full bg-app-tint p-1" role="radiogroup">
-              {(Object.keys(LANG_LABEL) as Language[]).map((l) => (
-                <button
-                  type="button"
-                  key={l}
-                  role="radio"
-                  aria-checked={language === l}
-                  onClick={() => setLanguage(l)}
-                  className={`min-h-10 rounded-full text-[15px] font-medium transition ${
-                    language === l ? "bg-app-ink text-white shadow" : "text-app-muted"
-                  }`}
-                >
-                  {LANG_LABEL[l]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="min-h-14 rounded-full bg-app-accent text-[17px] font-semibold text-white shadow-[0_8px_24px_rgba(0,89,255,0.35)] transition active:scale-[0.99] disabled:opacity-40 disabled:shadow-none"
-          >
-            Build my store ✨
-          </button>
-          <p className="-mt-2 text-center text-xs text-app-muted">Takes about 15 seconds</p>
-        </form>
-      </section>
+      </div>
 
       {/* How it works: pastel cards */}
-      <section className="mx-auto max-w-md px-4 pb-12">
-        <h2 className="tight mt-4 text-[24px] font-medium">
-          From blank page <span className="font-serif-i text-[28px]">to first sale</span>
+      <section className="mx-auto max-w-md px-4 pt-4 pb-12 lg:max-w-6xl lg:px-8 lg:pt-20 lg:pb-24">
+        <h2 className="tight text-[24px] font-medium lg:text-center lg:text-[44px]">
+          From blank page <span className="font-serif-i text-[28px] lg:text-[50px]">to first sale</span>
         </h2>
-        <div className="mt-4 grid gap-3">
-          {[
-            { bg: "bg-app-blush", n: "01", t: "What to sell", d: "2 to 4 product ideas your audience already trusts you for." },
-            { bg: "bg-app-mint", n: "02", t: "How to price it", d: "INR prices that fit your niche and audience size, with the reason." },
-            { bg: "bg-app-sky", n: "03", t: "What to write", d: "Bio and product pages in English, Hinglish or Hindi. Edit anything." },
-          ].map((c) => (
-            <div key={c.n} className={`${c.bg} rounded-[20px] p-5`}>
-              <p className="text-[12px] font-semibold text-app-muted">{c.n}</p>
-              <p className="mt-1 text-[19px] font-semibold tracking-tight">{c.t}</p>
-              <p className="mt-1 text-[14.5px] leading-snug text-app-ink/75">{c.d}</p>
+        <p className="mt-2 hidden text-center text-[17px] text-app-muted lg:block">
+          The three things new creators get stuck on, done for you in one go.
+        </p>
+        <div className="mt-4 grid gap-3 lg:mt-12 lg:grid-cols-3 lg:gap-6">
+          {STEPS.map((c) => (
+            <div key={c.n} className={`${c.bg} rounded-[20px] p-5 lg:min-h-[220px] lg:rounded-[28px] lg:p-8`}>
+              <p className="text-[12px] font-semibold text-app-muted lg:text-[14px]">{c.n}</p>
+              <p className="mt-1 text-[19px] font-semibold tracking-tight lg:mt-10 lg:text-[26px]">{c.t}</p>
+              <p className="mt-1 text-[14.5px] leading-snug text-app-ink/75 lg:mt-2 lg:text-[16px]">{c.d}</p>
             </div>
           ))}
         </div>
@@ -690,17 +814,17 @@ function GeneratingScreen({ handle }: { handle: string }) {
   }, [steps.length]);
 
   return (
-    <main className="min-h-dvh bg-app-tint" aria-live="polite">
-      <section className="bg-app-night px-5 pt-12 pb-16 text-white">
-        <div className="mx-auto max-w-md">
-          <h1 className="tight text-[34px] leading-[1.05] font-medium">
-            Building <span className="font-serif-i text-[38px] text-[#cfe6ff]">your store…</span>
+    <main className="min-h-dvh bg-app-night text-white" aria-live="polite">
+      <div className="mx-auto max-w-md px-5 pt-12 pb-10 lg:grid lg:min-h-dvh lg:max-w-6xl lg:grid-cols-[1fr_1fr] lg:items-center lg:gap-16 lg:px-8 lg:py-16">
+        <section>
+          <h1 className="tight text-[34px] leading-[1.05] font-medium lg:text-[56px]">
+            Building <span className="font-serif-i text-[38px] text-[#cfe6ff] lg:text-[64px]">your store…</span>
           </h1>
-          <ol className="mt-6 space-y-3.5">
+          <ol className="mt-6 space-y-3.5 lg:mt-10 lg:space-y-5">
             {steps.map((s, j) => (
-              <li key={s} className={`flex items-center gap-3 text-[15.5px] transition ${j > i ? "text-white/35" : "text-white"}`}>
+              <li key={s} className={`flex items-center gap-3 text-[15.5px] transition lg:text-[18px] ${j > i ? "text-white/35" : "text-white"}`}>
                 <span
-                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs ${
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs lg:h-7 lg:w-7 ${
                     j < i ? "bg-[#00b67a] text-white" : j === i ? "border-2 border-app-accent-2" : "border border-white/20"
                   }`}
                 >
@@ -711,20 +835,26 @@ function GeneratingScreen({ handle }: { handle: string }) {
             ))}
           </ol>
           {slow && (
-            <p className="rise mt-6 rounded-2xl bg-white/10 px-4 py-2.5 text-sm text-white/85">
+            <p className="rise mt-6 rounded-2xl bg-white/10 px-4 py-2.5 text-sm text-white/85 lg:max-w-md">
               Taking a little longer than usual. Still working on it…
             </p>
           )}
-        </div>
-      </section>
-      <div className="mx-auto -mt-8 max-w-md space-y-4 px-4 pb-10" aria-hidden>
-        <div className="rounded-[24px] bg-app-surface p-5 shadow-[0_12px_40px_rgba(22,16,30,0.08)]">
-          <div className="mx-auto h-20 w-20 rounded-full skeleton" />
-          <div className="mx-auto mt-4 h-6 w-48 skeleton" />
-          <div className="mt-4 h-14 skeleton" />
-        </div>
-        <div className="h-44 rounded-[20px] skeleton" />
-        <div className="h-44 rounded-[20px] skeleton" />
+        </section>
+
+        <section className="mt-10 space-y-4 opacity-90 lg:mt-0" aria-hidden>
+          <div className="overflow-hidden rounded-[24px] bg-app-surface shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+            <div className="h-20 bg-gradient-to-br from-[#0059ff] to-[#8fd3ff] opacity-60" />
+            <div className="p-5">
+              <div className="-mt-14 mx-auto h-20 w-20 rounded-full skeleton ring-4 ring-white" />
+              <div className="mx-auto mt-4 h-6 w-48 skeleton" />
+              <div className="mx-auto mt-3 h-4 w-64 skeleton" />
+              <div className="mt-6 grid gap-3 lg:grid-cols-2">
+                <div className="h-36 rounded-[18px] skeleton" />
+                <div className="h-36 rounded-[18px] skeleton" />
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );
@@ -948,18 +1078,19 @@ function PublishedScreen({ draft, onEdit, onNew }: { draft: Draft; onEdit: () =>
 
   return (
     <main className="min-h-dvh bg-app-tint">
-      <section className="bg-app-night px-5 pt-12 pb-20 text-white">
-        <div className="rise mx-auto max-w-md">
-          <div className="grid h-14 w-14 place-items-center rounded-full bg-[#00b67a] text-2xl">✓</div>
-          <h1 className="tight mt-5 text-[38px] leading-[1.02] font-medium">
-            Your store is <span className="font-serif-i text-[44px] text-[#cfe6ff]">live.</span>
+      <section className="bg-app-night px-5 pt-12 pb-20 text-white lg:pt-20 lg:pb-32">
+        <div className="rise mx-auto max-w-md lg:max-w-5xl lg:px-3">
+          <div className="grid h-14 w-14 place-items-center rounded-full bg-[#00b67a] text-2xl lg:h-16 lg:w-16">✓</div>
+          <h1 className="tight mt-5 text-[38px] leading-[1.02] font-medium lg:text-[64px]">
+            Your store is <span className="font-serif-i text-[44px] text-[#cfe6ff] lg:text-[74px]">live.</span>
           </h1>
-          <p className="mt-3 text-white/70">Put this link in your Instagram bio and share it with your followers.</p>
+          <p className="mt-3 text-white/70 lg:text-[18px]">Put this link in your Instagram bio and share it with your followers.</p>
         </div>
       </section>
 
-      <section className="mx-auto -mt-12 max-w-md px-4 pb-10">
-        <div className="rounded-[24px] bg-app-surface p-4 shadow-[0_12px_40px_rgba(22,16,30,0.12)]">
+      <section className="mx-auto -mt-12 max-w-md px-4 pb-10 lg:-mt-20 lg:grid lg:max-w-5xl lg:grid-cols-[1.2fr_1fr] lg:items-start lg:gap-6 lg:px-8">
+        <div className="rounded-[24px] bg-app-surface p-4 shadow-[0_12px_40px_rgba(22,16,30,0.12)] lg:p-6">
+          <p className="mb-3 hidden text-sm font-semibold lg:block">Your store link</p>
           <div className="flex items-center gap-2 rounded-full bg-app-tint p-1.5 pl-4">
             <span className="min-w-0 flex-1 truncate text-[15px] font-medium">{url.replace(/^https?:\/\//, "")}</span>
             <button
@@ -980,32 +1111,46 @@ function PublishedScreen({ draft, onEdit, onNew }: { draft: Draft; onEdit: () =>
               href={`https://wa.me/?text=${encodeURIComponent(share)}`}
               target="_blank"
               rel="noreferrer"
-              className="grid min-h-12 place-items-center rounded-full bg-[#25D366] font-semibold text-white"
+              className="grid min-h-12 place-items-center rounded-full bg-[#25D366] font-semibold text-white transition hover:brightness-105"
             >
               Share on WhatsApp
             </a>
-            <a href={`/s/${slug}`} target="_blank" className="grid min-h-12 place-items-center rounded-full bg-app-accent font-semibold text-white">
+            <a
+              href={`/s/${slug}`}
+              target="_blank"
+              className="grid min-h-12 place-items-center rounded-full bg-app-accent font-semibold text-white transition hover:brightness-110"
+            >
               View store ↗
             </a>
           </div>
-        </div>
-
-        <h2 className="tight mt-8 text-[22px] font-medium">
-          How it&apos;s <span className="font-serif-i text-[26px]">doing</span>
-        </h2>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <div className="rounded-[20px] bg-app-sky p-4">
-            <p className="tight text-[30px] font-bold">{st?.views ?? "–"}</p>
-            <p className="text-sm text-app-ink/70">visits</p>
-          </div>
-          <div className="rounded-[20px] bg-app-mint p-4">
-            <p className="tight text-[30px] font-bold">{clicks ?? "–"}</p>
-            <p className="text-sm text-app-ink/70">product clicks</p>
+          <div className="mt-6 hidden gap-2 border-t border-app-line pt-5 lg:flex">
+            <button onClick={onEdit} className="min-h-12 flex-1 rounded-full border border-app-line font-semibold transition hover:bg-app-tint">
+              Keep editing
+            </button>
+            <button onClick={onNew} className="min-h-12 flex-1 rounded-full text-sm font-medium text-app-muted hover:text-app-ink">
+              Build another store
+            </button>
           </div>
         </div>
-        <p className="mt-2 text-xs text-app-muted">Your own visits from this phone aren&apos;t counted.</p>
 
-        <div className="mt-8 flex gap-2">
+        <div className="lg:rounded-[24px] lg:bg-app-surface lg:p-6 lg:shadow-[0_12px_40px_rgba(22,16,30,0.12)]">
+          <h2 className="tight mt-8 text-[22px] font-medium lg:mt-0">
+            How it&apos;s <span className="font-serif-i text-[26px]">doing</span>
+          </h2>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="rounded-[20px] bg-app-sky p-4">
+              <p className="tight text-[30px] font-bold">{st?.views ?? "–"}</p>
+              <p className="text-sm text-app-ink/70">visits</p>
+            </div>
+            <div className="rounded-[20px] bg-app-mint p-4">
+              <p className="tight text-[30px] font-bold">{clicks ?? "–"}</p>
+              <p className="text-sm text-app-ink/70">product clicks</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-app-muted">Your own visits from this device aren&apos;t counted.</p>
+        </div>
+
+        <div className="mt-8 flex gap-2 lg:hidden">
           <button onClick={onEdit} className="min-h-12 flex-1 rounded-full border border-app-line bg-app-surface font-semibold">
             Keep editing
           </button>
