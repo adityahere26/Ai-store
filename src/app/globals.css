@@ -1,26 +1,127 @@
 @import "tailwindcss";
 
+/* ---------- Builder app chrome, in SuperProfile's visual language ---------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --app-bg: #ffffff;
+  --app-surface: #ffffff;
+  --app-tint: #f9f8ff; /* lavender wash */
+  --app-ink: #16101e;
+  --app-night: #0f0a19; /* hero band */
+  --app-muted: #696969;
+  --app-line: #e5e5e5;
+  --app-accent: #0059ff; /* primary CTA */
+  --app-accent-2: #0099ff; /* links, highlights */
+  --app-blush: #ffddf1;
+  --app-mint: #e5fff1;
+  --app-sky: #dce8ff;
+  --app-warn-bg: #fff6db;
+  --app-warn-ink: #6b4a00;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-hind), ui-sans-serif, system-ui, sans-serif;
+  --font-display-serif: var(--font-instrument), Georgia, serif;
+  --color-app-bg: var(--app-bg);
+  --color-app-surface: var(--app-surface);
+  --color-app-tint: var(--app-tint);
+  --color-app-ink: var(--app-ink);
+  --color-app-night: var(--app-night);
+  --color-app-muted: var(--app-muted);
+  --color-app-line: var(--app-line);
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-2: var(--app-accent-2);
+  --color-app-blush: var(--app-blush);
+  --color-app-mint: var(--app-mint);
+  --color-app-sky: var(--app-sky);
+  --color-app-warn-bg: var(--app-warn-bg);
+  --color-app-warn-ink: var(--app-warn-ink);
+
+  --color-sf-bg: var(--sf-bg);
+  --color-sf-surface: var(--sf-surface);
+  --color-sf-ink: var(--sf-ink);
+  --color-sf-muted: var(--sf-muted);
+  --color-sf-line: var(--sf-line);
+  --color-sf-accent: var(--sf-accent);
+  --color-sf-accent-ink: var(--sf-accent-ink);
+  --color-sf-soft: var(--sf-soft);
+  --color-sf-cover: var(--sf-cover);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ---------- Storefront themes (the creator's public page) ---------- */
+.theme-classic {
+  --sf-bg: #f9f8ff;
+  --sf-surface: #ffffff;
+  --sf-ink: #16101e;
+  --sf-muted: #5f5a66;
+  --sf-line: #ebe8f5;
+  --sf-accent: #0059ff;
+  --sf-accent-ink: #ffffff;
+  --sf-soft: #dce8ff;
+  --sf-cover: linear-gradient(135deg, #0059ff 0%, #0099ff 55%, #8fd3ff 100%);
+}
+.theme-midnight {
+  --sf-bg: #0f0a19;
+  --sf-surface: #1b1426;
+  --sf-ink: #f9f8ff;
+  --sf-muted: #aaa3b8;
+  --sf-line: #2c2340;
+  --sf-accent: #0099ff;
+  --sf-accent-ink: #ffffff;
+  --sf-soft: #2a2140;
+  --sf-cover: linear-gradient(135deg, #2b1a55 0%, #0f0a19 60%, #0059ff 130%);
+}
+.theme-blush {
+  --sf-bg: #fff5fb;
+  --sf-surface: #ffffff;
+  --sf-ink: #16101e;
+  --sf-muted: #6e5f68;
+  --sf-line: #f6dcea;
+  --sf-accent: #16101e;
+  --sf-accent-ink: #ffffff;
+  --sf-soft: #ffddf1;
+  --sf-cover: linear-gradient(135deg, #ffddf1 0%, #e9dcff 55%, #dce8ff 100%);
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--app-bg);
+  color: var(--app-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-serif-i {
+  font-family: var(--font-instrument), Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.tight {
+  letter-spacing: -0.04em;
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #eeedf5 0px, #f9f8ff 120px, #eeedf5 240px);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 14px;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.rise { animation: rise 0.35s ease-out both; }
+
+@keyframes sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+.sheet-in { animation: sheet-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .rise, .sheet-in { animation: none; }
 }
