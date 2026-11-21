@@ -7,6 +7,7 @@ import { suggestOneLiners } from "@/lib/oneLiners";
 import { formatInr, priceBand } from "@/lib/pricing";
 import {
   ATTACHMENT_TYPES,
+  IG_BIO_MAX,
   MAX_FILES,
   MAX_TOTAL_BYTES,
   FORMATS,
@@ -1903,6 +1904,48 @@ function RewriteBar({ busy, chips, onRewrite, label }: { busy: boolean; chips: s
   );
 }
 
+/** Bio editor capped at Instagram's limit, with a live counter and copy-to-Instagram. */
+function BioField({ bio, onChange }: { bio: string; onChange: (bio: string) => void }) {
+  const [copied, setCopied] = useState(false);
+  const n = bio.length;
+  const over = n > IG_BIO_MAX; // only possible for drafts made before the limit existed
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold">Bio</span>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(bio);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            } catch {}
+          }}
+          className="min-h-8 rounded-full px-3 text-[12.5px] font-semibold text-app-accent hover:bg-app-sky"
+        >
+          {copied ? "Copied ✓" : "Copy for Instagram"}
+        </button>
+      </div>
+      <textarea
+        className={`${inputCls} mt-1.5 resize-none`}
+        rows={4}
+        value={bio}
+        maxLength={over ? undefined : IG_BIO_MAX}
+        onChange={(e) => onChange(over ? e.target.value : e.target.value.slice(0, IG_BIO_MAX))}
+        aria-describedby="bio-count"
+      />
+      <div id="bio-count" className="mt-1 flex items-center justify-between gap-2 text-xs">
+        <span className="text-app-muted">Fits your Instagram bio, so you can use the same one there.</span>
+        <span className={`shrink-0 font-semibold tabular-nums ${over ? "text-[#d0234f]" : n > IG_BIO_MAX - 15 ? "text-app-warn-ink" : "text-app-muted"}`}>
+          {n}/{IG_BIO_MAX}
+        </span>
+      </div>
+      {over && <p className="mt-1 text-xs text-[#d0234f]">Too long for Instagram. Trim it, or tap “Shorter” above.</p>}
+    </div>
+  );
+}
+
 function BioSheet({
   storefront: s,
   busy,
@@ -1938,9 +1981,7 @@ function BioSheet({
         <Field label="Tagline">
           <input className={inputCls} value={s.tagline} maxLength={140} onChange={(e) => onChange({ tagline: e.target.value })} />
         </Field>
-        <Field label="Bio" hint={`${s.bio.length}/800`}>
-          <textarea className={`${inputCls} resize-none`} rows={5} value={s.bio} maxLength={800} onChange={(e) => onChange({ bio: e.target.value })} />
-        </Field>
+        <BioField bio={s.bio} onChange={(bio) => onChange({ bio })} />
       </div>
     </Sheet>
   );

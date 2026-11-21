@@ -1,6 +1,6 @@
 import { lookupInstagram, igSummary, normalizeHandle, type IgResult } from "./instagram";
 import { generateJson, LlmError } from "./llm";
-import { SYSTEM_PROMPT, storefrontQuality, storefrontUserPrompt, toStorefront } from "./prompts";
+import { SYSTEM_PROMPT, languageQuality, storefrontQuality, storefrontUserPrompt, toStorefront } from "./prompts";
 import { LlmStorefront, type AboutYou, type Attachment, type CreatorContext, type Language, type Storefront } from "./schema";
 
 export type IgStatus = IgResult["status"] | "private" | "skipped";
@@ -121,7 +121,7 @@ export async function generateStorefront(input: {
       schema: LlmStorefront,
       system: SYSTEM_PROMPT,
       user: storefrontUserPrompt(ctx, files.map((f) => f.name)),
-      qualityCheck: storefrontQuality,
+      qualityCheck: (o) => (o.status === "ok" ? [...storefrontQuality(o), ...languageQuality(o, ctx.language)] : storefrontQuality(o)),
       files: files.map((f) => ({ mimeType: f.mimeType, data: f.data })),
     });
     const out = res.data;

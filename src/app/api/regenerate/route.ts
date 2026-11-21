@@ -3,6 +3,7 @@ import { generateJson, LlmError } from "@/lib/llm";
 import {
   SYSTEM_PROMPT,
   bioPrompt,
+  languageQuality,
   finalizeProduct,
   productPrompt,
   productQuality,
@@ -10,7 +11,7 @@ import {
   storefrontUserPrompt,
   toStorefront,
 } from "@/lib/prompts";
-import { CreatorContext, LlmBio, LlmProduct, LlmStorefront, Storefront } from "@/lib/schema";
+import { CreatorContext, IG_BIO_MAX, LlmBio, LlmProduct, LlmStorefront, Storefront, fitBio } from "@/lib/schema";
 
 export const maxDuration = 90;
 
@@ -34,8 +35,17 @@ export async function POST(req: Request) {
 
   try {
     if (target.kind === "bio") {
-      const r = await generateJson({ schema: LlmBio, system: SYSTEM_PROMPT, user: bioPrompt(c, s, instruction), temperature: 1 });
-      return Response.json({ kind: "ok", bio: r.data.bio, tagline: r.data.tagline });
+      const r = await generateJson({
+        schema: LlmBio,
+        system: SYSTEM_PROMPT,
+        user: bioPrompt(c, s, instruction),
+        temperature: 1,
+        qualityCheck: (d) => [
+          ...(d.bio.trim().length > IG_BIO_MAX ? [`Bio is ${d.bio.trim().length} characters; rewrite it under ${IG_BIO_MAX} (Instagram's limit).`] : []),
+          ...languageQuality(d, c.language),
+        ],
+      });
+      return Response.json({ kind: "ok", bio: fitBio(r.data.bio), tagline: r.data.tagline });
     }
 
     if (target.kind === "product") {
@@ -56,7 +66,7 @@ export async function POST(req: Request) {
       system: SYSTEM_PROMPT,
       user: storefrontUserPrompt(c) + (instruction ? `\nCreator's request: "${instruction}"` : "") +
         `\nGive a fresh take that differs from: ${s.products.map((p) => p.title).join("; ")}`,
-      qualityCheck: storefrontQuality,
+      qualityCheck: (o) => (o.status === "ok" ? [...storefrontQuality(o), ...languageQuality(o, c.language)] : storefrontQuality(o)),
       temperature: 1,
     });
     if (r.data.status !== "ok" || r.data.products.length < 2) throw new LlmError("invalid", "no products");

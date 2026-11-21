@@ -21,6 +21,25 @@ export const FORMAT_LABEL: Record<Format, string> = {
   community: "Community",
 };
 
+/** Instagram's bio limit. Our store bio must also fit, so creators can reuse it on their profile. */
+export const IG_BIO_MAX = 150;
+
+/**
+ * Last-resort guarantee that a bio fits Instagram: cut at the last full sentence
+ * under the limit, else the last whole word. Never adds "…" (that would look broken on Instagram).
+ */
+export function fitBio(text: string, max = IG_BIO_MAX): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
+  const sentenceEnd = Math.max(head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "), head.lastIndexOf("। "));
+  // A complete sentence reads better than a longer fragment.
+  if (sentenceEnd >= 40) return head.slice(0, sentenceEnd + 1).trim();
+  if (/[.!?।]$/.test(head)) return head;
+  const lastSpace = head.lastIndexOf(" ");
+  return head.slice(0, lastSpace > 40 ? lastSpace : max).replace(/[\s,;:–-]+$/, "").trim();
+}
+
 export const LANGUAGES = ["english", "hinglish", "hindi"] as const;
 export type Language = (typeof LANGUAGES)[number];
 

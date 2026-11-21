@@ -2,6 +2,8 @@ import { nanoid } from "nanoid";
 import { guardPrice, pricingGuideForPrompt } from "./pricing";
 import {
   FORMATS,
+  IG_BIO_MAX,
+  fitBio,
   type CreatorContext,
   type Language,
   type LlmStorefront,
@@ -12,14 +14,17 @@ import {
 } from "./schema";
 import type { z } from "zod";
 
+const STICK = " Use this language even if the creator's own answers are written in English.";
+
 export const LANGUAGE_RULE: Record<Language, string> = {
   english:
     "Write all creator-facing copy in simple, warm Indian English. Short sentences. No jargon.",
   hinglish:
     "Write all copy in natural Hinglish (Hindi words in Roman script mixed with English), the way Indian creators write Instagram captions, e.g. 'Ghar pe hi fit raho, bina gym ke'. Product format names may stay in English.",
   hindi:
-    "Write all copy in simple, conversational Hindi in Devanagari script. Common English words (course, template, live, 1:1) may stay in English.",
+    "Write all copy in simple, conversational Hindi in Devanagari script. Common English words (course, template, live, 1:1) may stay in English." + STICK,
 };
+LANGUAGE_RULE.hinglish += STICK;
 
 export const BANNED = [
   "unlock",
@@ -52,7 +57,7 @@ How to think:
 4. Make titles specific and outcome-led, e.g. "21-Day Home Workout Plan for Busy Moms", not "Fitness Course". Mention concrete deliverables in highlights (number of videos, sessions, pages, duration, WhatsApp support, etc.) that are realistic for one creator to deliver.
 5. Prices must rise with the ladder: entry < core < premium. Premium is never cheaper than core.
 6. Keep every product internally consistent: the title, description and highlights must agree on durations, counts and format (a "15-minute" title cannot describe a 60-minute session).
-7. Bio: first person, 2-3 short sentences, who they help + what result + a human detail from the input. If the creator shared social proof, weave in the single strongest fact exactly as stated (never inflate it). If they shared a personal story, use one specific detail from it. The tagline is a 4-10 word hook.
+7. Bio: it must fit Instagram's bio limit: at most 150 characters INCLUDING spaces and emojis (count them). First person, 1-2 short sentences: who they help + what result + ONE human detail. If the creator shared social proof or a personal story, pick the single strongest detail (never inflate a fact), not all of them. The tagline is a 4-10 word hook.
 8. displayName: use the real name or brand from the input. If none is given, NEVER invent a personal name; use a short brand-style name from the niche (e.g. "Desk Yoga Studio") and add "We assumed your store name…" to assumptions.
 
 Honesty rules (strict):
@@ -129,6 +134,8 @@ export function storefrontQuality(out: LlmStorefront): string[] {
   const issues: string[] = [];
   if (out.products.length < 2) issues.push("Return 2 to 4 products.");
   if (!out.bio.trim() || out.bio.length < 40) issues.push("Bio is missing or too short.");
+  if (out.bio.trim().length > IG_BIO_MAX)
+    issues.push(`Bio is ${out.bio.trim().length} characters; Instagram allows ${IG_BIO_MAX}. Rewrite it under ${IG_BIO_MAX} characters, keeping the strongest detail.`);
   if (!out.displayName.trim()) issues.push("displayName is empty.");
   // Ladder rules apply to our suggestions only; the creator's real catalogue is theirs to shape
   // (they may sell two e-books, or have no low-ticket product yet).
@@ -148,6 +155,15 @@ export function storefrontQuality(out: LlmStorefront): string[] {
   const hits = bannedHits(allText);
   if (hits.length) issues.push(`Remove these overused words: ${hits.join(", ")}.`);
   return issues;
+}
+
+/** Catch copy written in the wrong language (e.g. English when Hindi was chosen). */
+export function languageQuality(out: { bio: string; tagline: string }, language: Language): string[] {
+  if (language !== "hindi") return [];
+  const devanagari = (t: string) => (t.match(/[\u0900-\u097F]/g)?.length ?? 0) / Math.max(1, t.replace(/\s/g, "").length);
+  return devanagari(out.bio) < 0.4 || devanagari(out.tagline) < 0.3
+    ? ["The bio and tagline must be in Hindi (Devanagari script), even though some of the creator's answers are in English."]
+    : [];
 }
 
 export function productQuality(p: z.infer<typeof LlmProduct>, others: Product[]): string[] {
@@ -186,7 +202,7 @@ export function toStorefront(
     followers: ctx.followers,
     niche: out.niche,
     tagline: out.tagline,
-    bio: out.bio,
+    bio: fitBio(out.bio),
     language: ctx.language,
     theme: out.suggestedTheme as Theme,
     products,
@@ -213,7 +229,7 @@ ${storeSummary(s)}
 Rewrite ONLY the tagline and bio. Make it noticeably different from the current version.${
     instruction ? `\nCreator's request: "${instruction}"` : ""
   }
-Rules: first person, 2-3 short sentences, no invented facts, avoid: ${BANNED.join(", ")}.
+Rules: at most ${IG_BIO_MAX} characters including spaces and emojis (Instagram's bio limit; count them), first person, 1-2 short sentences, one strongest detail only, no invented facts, avoid: ${BANNED.join(", ")}.
 LANGUAGE: ${LANGUAGE_RULE[s.language]}`;
 }
 
