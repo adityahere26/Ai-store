@@ -814,6 +814,43 @@ function useInstagramPreview(rawHandle: string): IgPreview {
   return state;
 }
 
+/** AI one-liners for usernames the keyword list can't place (debounced, cached server-side). */
+function useAiOneLiners(handle: string, enabled: boolean) {
+  const [res, setRes] = useState<{ state: "idle" | "loading" | "ok" | "error"; isName: boolean; niche: string; lines: string[]; for: string }>({
+    state: "idle",
+    isName: false,
+    niche: "",
+    lines: [],
+    for: "",
+  });
+  useEffect(() => {
+    if (!enabled || handle.length < 4) return;
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setRes((r) => ({ ...r, state: "loading" }));
+      try {
+        const r = await fetch("/api/oneliners", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ handle }),
+          signal: ctrl.signal,
+        });
+        const d = await r.json();
+        if (d.kind === "ok") setRes({ state: "ok", isName: d.isName, niche: d.niche, lines: d.lines ?? [], for: handle });
+        else setRes((x) => ({ ...x, state: "error" }));
+      } catch {
+        if (!ctrl.signal.aborted) setRes((x) => ({ ...x, state: "error" }));
+      }
+    }, 700);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [handle, enabled]);
+  // Ignore answers for a handle the creator has since changed.
+  return res.for === handle || res.state === "loading" ? res : { ...res, state: "idle" as const };
+}
+
 /* ---------------- Input screen ---------------- */
 
 const STEPS = [
@@ -842,7 +879,14 @@ function InputScreen(props: {
   // One-liner ideas from keywords in the username. Only when a valid handle is typed.
   const cleanHandle = handle.trim().replace(/^@+/, "");
   const check = handleCheck(handle);
-  const oneLiners = check === "ok" ? suggestOneLiners(cleanHandle) : null;
+  const keyword = check === "ok" ? suggestOneLiners(cleanHandle) : null;
+  // Ask AI only when keywords can't decide: nothing matched, or several niches at once ("newmomfitness").
+  const needAi = !!keyword && (keyword.matches === 0 || keyword.matches > 1);
+  const ai = useAiOneLiners(cleanHandle, needAi);
+  const oneLiners =
+    keyword && needAi && ai.state === "ok" && !ai.isName && ai.lines.length
+      ? { niche: ai.niche, from: "username" as const, matches: 1, lines: ai.lines }
+      : keyword;
   return (
     <main className="min-h-dvh overflow-x-clip bg-app-tint">
       {/* Dark hero band. On mobile the form card hangs over its bottom edge; on desktop it sits beside the headline. */}
@@ -975,6 +1019,11 @@ function InputScreen(props: {
                           : oneLiners.from === "profile"
                             ? `💡 Based on your Instagram bio (${oneLiners.niche}). Tap one, then edit:`
                             : "💡 Not sure what to write? Start with one of these and edit:"}
+                        {needAi && ai.state === "loading" && (
+                          <span className="ml-1.5 inline-flex items-center gap-1 font-normal">
+                            <span className="h-3 w-3 animate-spin rounded-full border-2 border-app-line border-t-app-accent" aria-hidden /> reading your username…
+                          </span>
+                        )}
                       </p>
                       <div className="mt-1.5 grid gap-1.5">
                         {oneLiners.lines.map((line) => {

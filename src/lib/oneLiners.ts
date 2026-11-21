@@ -142,7 +142,7 @@ const NICHES: Niche[] = [
   {
     id: "parenting",
     label: "parenting",
-    keys: [["mom", "prefix"], ["mommy", "sub"], ["mumma", "sub"], ["mama", "exact"], ["parent", "sub"], ["baby", "sub"], ["kids", "sub"], ["toddler", "sub"]],
+    keys: [["mom", "exact"], ["moms", "exact"], ["momof", "sub"], ["momblog", "sub"], ["mompreneur", "sub"], ["momtalk", "sub"], ["mum", "exact"], ["mumof", "sub"], ["mommy", "sub"], ["mumma", "sub"], ["mama", "exact"], ["mother", "sub"], ["newmom", "sub"], ["newmum", "sub"], ["momlife", "sub"], ["mumlife", "sub"], ["postpartum", "sub"], ["pregnan", "sub"], ["maternity", "sub"], ["parent", "sub"], ["baby", "sub"], ["kids", "sub"], ["toddler", "sub"]],
     lines: [
       "I share honest parenting tips and activities for toddlers and young kids",
       "I help new moms with baby care, routines and postpartum recovery",
@@ -180,6 +180,76 @@ const NICHES: Niche[] = [
     ],
   },
   {
+    id: "pets",
+    label: "pets",
+    keys: [["pet", "exact"], ["pets", "sub"], ["dog", "exact"], ["dogs", "exact"], ["doggo", "sub"], ["dogmom", "sub"], ["puppy", "sub"], ["cats", "exact"], ["catmom", "sub"], ["kitten", "sub"], ["paws", "sub"], ["furbaby", "sub"]],
+    lines: [
+      "I share simple pet care, training and feeding tips for Indian pet parents",
+      "I help first-time dog parents raise happy, well-behaved puppies at home",
+      "I share honest pet product reviews and home remedies for everyday pet problems",
+    ],
+  },
+  {
+    id: "gardening",
+    label: "gardening",
+    keys: [["plant", "prefix"], ["garden", "sub"], ["terrace", "sub"], ["balcony", "sub"], ["bonsai", "sub"], ["succulent", "sub"], ["greenthumb", "sub"]],
+    lines: [
+      "I help city people grow plants and veggies on their balcony or terrace",
+      "I share easy plant care tips for beginners who keep killing their plants",
+      "I teach organic kitchen gardening in small spaces, step by step",
+    ],
+  },
+  {
+    id: "crafts",
+    label: "crafts & DIY",
+    keys: [["craft", "sub"], ["diy", "sub"], ["crochet", "sub"], ["knit", "prefix"], ["resin", "sub"], ["handmade", "sub"], ["embroider", "sub"], ["mehndi", "sub"], ["mehendi", "sub"], ["henna", "sub"], ["candle", "sub"], ["pottery", "sub"]],
+    lines: [
+      "I teach easy DIY crafts and handmade gift ideas anyone can make at home",
+      "I share step-by-step tutorials for beginners, from first stitch to finished piece",
+      "I help hobby crafters turn their handmade work into a small side business",
+    ],
+  },
+  {
+    id: "photography",
+    label: "photography",
+    keys: [["photo", "prefix"], ["photography", "sub"], ["camera", "sub"], ["lens", "exact"], ["clicks", "exact"], ["shotby", "sub"]],
+    lines: [
+      "I teach mobile photography tricks that make everyday photos look professional",
+      "I share photo editing presets and tutorials for creators and small brands",
+      "I help beginners learn camera basics and shoot better portraits",
+    ],
+  },
+  {
+    id: "books",
+    label: "books & reading",
+    keys: [["book", "prefix"], ["bookstagram", "sub"], ["reader", "sub"], ["reads", "exact"], ["novel", "sub"], ["poetry", "sub"], ["poet", "exact"], ["writer", "sub"]],
+    lines: [
+      "I share book recommendations and short summaries for busy readers",
+      "I help people build a reading habit with simple monthly reading lists",
+      "I share writing tips and prompts for aspiring writers and poets",
+    ],
+  },
+  {
+    id: "decor",
+    label: "home decor",
+    keys: [["decor", "sub"], ["interior", "sub"], ["homedecor", "sub"], ["homestyl", "sub"], ["organis", "sub"], ["organiz", "sub"]],
+    lines: [
+      "I share budget home decor ideas to make rented Indian homes feel beautiful",
+      "I help people organise small homes and kitchens with simple, affordable hacks",
+      "I share interior styling tips and before-after makeovers for every budget",
+    ],
+  },
+  {
+    id: "career",
+    label: "careers & jobs",
+    keys: [["career", "sub"], ["resume", "sub"], ["interview", "sub"], ["jobs", "exact"], ["hiring", "sub"], ["linkedin", "sub"], ["placement", "sub"]],
+    lines: [
+      "I help freshers land their first job with resume, LinkedIn and interview tips",
+      "I share career advice for young professionals switching roles or industries",
+      "I help job seekers crack interviews with real questions and sample answers",
+    ],
+  },
+  {
     id: "travel",
     label: "travel",
     keys: [["travel", "sub"], ["trip", "exact"], ["trips", "exact"], ["wander", "sub"], ["backpack", "sub"], ["explore", "sub"], ["nomad", "sub"]],
@@ -201,7 +271,7 @@ const NICHES: Niche[] = [
   },
 ];
 
-const GENERIC = [
+export const GENERIC_ONE_LINERS = [
   "I share what I know and help my followers learn it the easy way",
   "I'm a creator sharing tips, honest advice and my everyday learnings",
   "I help people with simple, practical advice from my own experience",
@@ -215,7 +285,7 @@ function tokens(s: string): string[] {
     .filter(Boolean);
 }
 
-function matches(text: string, [key, mode]: [string, Mode]): boolean {
+function matches_(text: string, [key, mode]: [string, Mode]): boolean {
   const flat = text.toLowerCase().replace(/[^a-z]/g, "");
   if (mode === "sub") return flat.includes(key);
   const words = tokens(text);
@@ -226,6 +296,8 @@ function matches(text: string, [key, mode]: [string, Mode]): boolean {
 export interface OneLinerSuggestions {
   /** null = nothing niche-like found, generic suggestions. */
   niche: string | null;
+  /** How many different niches the text matched (2+ = a combo like "newmomfitness"; AI can be more specific). */
+  matches: number;
   /** Where the niche was spotted, for the label ("username" or "Instagram bio"). */
   from: "username" | "profile" | null;
   lines: string[];
@@ -233,7 +305,7 @@ export interface OneLinerSuggestions {
 
 function detect(text: string): Niche | null {
   if (!text.trim()) return null;
-  return NICHES.find((n) => n.keys.some((k) => matches(text, k))) ?? null;
+  return NICHES.find((n) => n.keys.some((k) => matches_(text, k))) ?? null;
 }
 
 function withFollowers(line: string, followers?: number): string {
@@ -255,6 +327,7 @@ export function suggestOneLiners(handle: string, profile?: { fullName?: string; 
     niche = detect(`${profile.fullName ?? ""} ${profile.bio ?? ""}`);
     if (niche) from = "profile";
   }
-  const base = niche ? niche.lines : GENERIC;
-  return { niche: niche?.label ?? null, from, lines: base.map((l) => withFollowers(l, profile?.followers)) };
+  const base = niche ? niche.lines : GENERIC_ONE_LINERS;
+  const matches = NICHES.filter((n) => n.keys.some((k) => matches_(h, k))).length;
+  return { niche: niche?.label ?? null, from, matches, lines: base.map((l) => withFollowers(l, profile?.followers)) };
 }
