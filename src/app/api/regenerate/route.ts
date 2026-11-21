@@ -55,7 +55,7 @@ export async function POST(req: Request) {
         schema: LlmProduct,
         system: SYSTEM_PROMPT,
         user: productPrompt(c, s, target.index, instruction),
-        qualityCheck: (p) => productQuality(p, others),
+        qualityCheck: (p) => productQuality(p, others, s.displayName),
         temperature: 1,
       });
       return Response.json({ kind: "ok", product: finalizeProduct(r.data, c.followers) });

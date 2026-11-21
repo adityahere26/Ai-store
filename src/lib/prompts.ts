@@ -166,8 +166,12 @@ export function languageQuality(out: { bio: string; tagline: string }, language:
     : [];
 }
 
-export function productQuality(p: z.infer<typeof LlmProduct>, others: Product[]): string[] {
+export function productQuality(p: z.infer<typeof LlmProduct>, others: Product[], storeName?: string): string[] {
   const issues: string[] = [];
+  const t = p.title.trim().toLowerCase();
+  // Seen in testing: a rewrite titled the product with the store's own name ("Fit with Riya").
+  if (storeName && (t === storeName.trim().toLowerCase() || t.replace(/^@/, "") === storeName.trim().toLowerCase().replace(/^@/, "")))
+    issues.push("The title is the store's name, not a product. Give the product its own descriptive, outcome-led title.");
   if (others.some((o) => o.title.trim().toLowerCase() === p.title.trim().toLowerCase()))
     issues.push("Title duplicates another product.");
   const hits = bannedHits([p.title, p.description, ...p.highlights].join(" "));
@@ -241,7 +245,7 @@ ${storeSummary(s)}
 
 ${pricingGuideForPrompt(ctx.followers)}
 
-Replace product #${index + 1} ("${cur.title}", ${cur.format}, ₹${cur.priceInr}) with a better or fresher idea. Keep the "${cur.tier}" tier unless the creator asks otherwise. It must not duplicate the other products' formats or topics.${
+Replace product #${index + 1} ("${cur.title}", ${cur.format}, ₹${cur.priceInr}) with a better or fresher idea. The title must describe the product itself, never the store or creator name ("${s.displayName}"). Keep the "${cur.tier}" tier unless the creator asks otherwise. It must not duplicate the other products' formats or topics.${
     instruction ? `\nCreator's request: "${instruction}"` : ""
   }
 ${cur.origin === "creator" ? `This product came from the creator. If you keep the same product and only improve it, set origin "creator" and keep their price unless asked to change it. If you replace it with a different idea, set origin "ai".` : `Set origin "ai".`}
