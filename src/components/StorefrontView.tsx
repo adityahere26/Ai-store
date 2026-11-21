@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BrandMark } from "./Brand";
 import { useState } from "react";
 import { formatInr } from "@/lib/pricing";
 import { FORMAT_LABEL, THEMES, type Product, type Storefront, type Theme } from "@/lib/schema";
@@ -227,9 +228,8 @@ export default function StorefrontView({ storefront: s, mode, onEditBio, onEditP
 
             {!editing && (
               <footer className="mt-12 text-center text-[13px] text-sf-muted @3xl:text-left">
-                Made with{" "}
-                <Link href="/" className="font-semibold text-sf-ink underline-offset-2 hover:underline">
-                  Minute Store
+                <Link href="/" className="inline-flex items-center gap-1.5 hover:opacity-80">
+                  Made with <BrandMark size={18} /> <span className="font-semibold text-sf-ink">Minute Store</span>
                 </Link>{" "}
                 · Build yours free
               </footer>

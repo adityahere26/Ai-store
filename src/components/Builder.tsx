@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import StorefrontView, { compactCount, safeTheme } from "./StorefrontView";
 import Sheet from "./Sheet";
+import { BrandLogo } from "./Brand";
 import { suggestOneLiners } from "@/lib/oneLiners";
 import { formatInr, priceBand } from "@/lib/pricing";
 import {
@@ -485,9 +486,7 @@ export default function Builder() {
           <div className="sticky top-0 z-30 bg-app-night text-white">
             <div className="mx-auto flex max-w-md items-center justify-between px-4 py-2.5 lg:max-w-7xl lg:px-8 lg:py-3">
               <div className="flex items-center gap-6">
-                <p className="hidden text-[17px] font-semibold tracking-tight lg:block">
-                  <span className="text-app-accent-2">✦</span> Minute Store
-                </p>
+                <BrandLogo size={30} className="hidden text-[17px] lg:inline-flex" />
                 <button onClick={startOver} className="min-h-10 text-sm font-medium text-white/70 hover:text-white">
                   ← Start over
                 </button>
@@ -919,9 +918,7 @@ function InputScreen(props: {
           style={{ background: "radial-gradient(circle, #0099ff 0%, transparent 70%)" }}
         />
         <nav className="relative mx-auto flex max-w-md items-center justify-between px-5 pt-5 lg:max-w-6xl lg:px-8 lg:pt-7">
-          <p className="text-[17px] font-semibold tracking-tight lg:text-[20px]">
-            <span className="text-app-accent-2">✦</span> Minute Store
-          </p>
+          <BrandLogo size={32} className="text-[18px] lg:text-[21px]" />
           <div className="flex items-center gap-6">
             <span className="hidden text-sm text-white/60 lg:inline">For creators, coaches &amp; educators</span>
             <span className="rounded-full border border-white/15 px-3 py-1 text-[12px] text-white/70 lg:text-[13px]">Free · no sign-up</span>
