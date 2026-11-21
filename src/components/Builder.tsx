@@ -2115,7 +2115,7 @@ function InspirationSheet({
       {busy && !insp && (
         <div aria-live="polite">
           <p className="text-[15px] font-semibold">Finding creators in {niche}…</p>
-          <p className="mt-1 text-sm text-app-muted">We check suggested profiles on Instagram, so this can take up to a minute.</p>
+          <p className="mt-1 text-sm text-app-muted">Searching the web for top creators in your niche. Usually 10–20 seconds.</p>
           <div className="mt-5 space-y-3" aria-hidden>
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center gap-3">
@@ -2146,9 +2146,11 @@ function InspirationSheet({
           <section>
             <h3 className="tight text-[20px] font-semibold">Creators to learn from</h3>
             <p className="mt-0.5 text-[12.5px] text-app-muted">
-              {insp.creators?.some((c) => c.check === "verified")
-                ? "✓ Profiles checked on Instagram. Tap to see their most popular Reels."
-                : "AI suggestions. We couldn't check them on Instagram right now, so search before you follow."}
+              {insp.creators?.some((c) => c.source)
+                ? "Found in published lists on the web, with sources. ✓ = profile also checked on Instagram."
+                : insp.creators?.some((c) => c.check === "verified")
+                  ? "✓ Profiles checked on Instagram. Tap to see their most popular Reels."
+                  : "AI suggestions. We couldn't check them right now, so search before you follow."}
             </p>
             {!insp.creators?.length ? (
               <p className="mt-3 rounded-2xl bg-app-tint p-3 text-sm text-app-muted">
@@ -2157,7 +2159,7 @@ function InspirationSheet({
             ) : (
               <ul className="mt-3 space-y-2.5">
                 {insp.creators!.map((c) => (
-                  <li key={c.handle} className="flex gap-3 rounded-[18px] border border-app-line p-3">
+                  <li key={c.handle || c.name} className="flex gap-3 rounded-[18px] border border-app-line p-3">
                     <CreatorAvatar c={c} />
                     <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 text-[15px] leading-tight font-semibold">
@@ -2168,24 +2170,41 @@ function InspirationSheet({
                           </span>
                         )}
                       </p>
-                      <p className="truncate text-[12.5px] text-app-muted">
-                        @{c.handle}
-                        {c.followers ? ` · ${compactCount(c.followers)} followers` : ""}
-                        {c.check === "unchecked" ? " · couldn't verify right now" : ""}
-                      </p>
+                      {(c.handle || c.followers || c.check === "unchecked") && (
+                        <p className="truncate text-[12.5px] text-app-muted">
+                          {c.handle ? `@${c.handle}` : ""}
+                          {c.followers ? ` · ${compactCount(c.followers)} followers` : ""}
+                          {c.check === "unchecked" ? `${c.handle ? " · " : ""}not checked` : ""}
+                        </p>
+                      )}
                       <p className="mt-1 text-[13.5px] leading-snug text-app-ink/80">{c.why}</p>
-                      <a
-                        href={
-                          c.check === "verified"
-                            ? `https://www.instagram.com/${c.handle}/reels/`
-                            : `https://www.google.com/search?q=${encodeURIComponent(`${c.name || c.handle} instagram`)}`
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-flex min-h-8 items-center rounded-full bg-app-ink px-3 text-[12.5px] font-semibold text-white"
-                      >
-                        {c.check === "verified" ? "See top Reels ↗" : "Find them ↗"}
-                      </a>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <a
+                          href={
+                            c.check === "verified"
+                              ? `https://www.instagram.com/${c.handle}/reels/`
+                              : c.handle && c.check === "web"
+                                ? `https://www.instagram.com/${c.handle}/`
+                                : `https://www.google.com/search?q=${encodeURIComponent(`${c.name || c.handle} instagram`)}`
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-8 items-center rounded-full bg-app-ink px-3 text-[12.5px] font-semibold text-white"
+                        >
+                          {c.check === "verified" ? "See top Reels ↗" : c.handle ? "Open profile ↗" : "Find them ↗"}
+                        </a>
+                        {c.source && (
+                          <a
+                            href={c.source.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={c.source.title}
+                            className="inline-flex min-h-8 max-w-full items-center truncate rounded-full border border-app-line px-3 text-[12px] text-app-muted hover:text-app-ink"
+                          >
+                            Found in: {c.source.domain} ↗
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </li>
                 ))}

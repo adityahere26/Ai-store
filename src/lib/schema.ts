@@ -161,9 +161,11 @@ export const LlmInspiration = z.object({
   creators: z
     .array(
       z.object({
-        handle: z.string().min(1).max(40),
-        name: z.string().max(80),
+        handle: z.string().max(40), // "" when the source doesn't show it
+        name: z.string().min(2).max(80),
         why: z.string().min(10).max(160),
+        /** Which web sources ([n]) mention this creator. Empty when no web sources were given. */
+        sourceIds: z.array(z.number().int().min(1).max(12)).max(3),
       }),
     )
     .max(12),
@@ -205,8 +207,13 @@ export interface InspirationCreator {
   handle: string;
   name: string;
   why: string;
-  /** "verified": public profile checked just now. "unchecked": Instagram unreachable (e.g. from cloud servers). */
-  check: "verified" | "unchecked";
+  /**
+   * "verified": public Instagram profile checked just now.
+   * "web": found in a published web page (see source); profile not checked.
+   * "unchecked": AI suggestion that couldn't be checked anywhere.
+   */
+  check: "verified" | "web" | "unchecked";
+  source?: { title: string; url: string; domain: string };
   followers?: number;
   posts?: number;
   avatarUrl?: string;

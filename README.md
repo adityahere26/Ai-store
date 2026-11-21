@@ -25,7 +25,8 @@ Built as a take-home for SuperProfile's PM (AI-native, 0→1) role.
 ## Instagram: what we do and don't read
 
 - **The creator's own handle is never looked up.** It's used only as their store name and @link; the store is built from their own words (description, About-you answers, ideas or uploads). The brief treats a self-description as a fully valid input.
-- **Two optional helpers check public Instagram pages, best effort:** verifying AI-suggested creators to learn from, and checking whether a new username looks free. Instagram blocks these checks from cloud servers, so on the live site they degrade gracefully ("couldn't verify right now"), and hashtag pages (which always work) show real top posts instead.
+- **"Creators to learn from" come from the web, not Instagram:** we search for published lists of creators in the niche (Tavily web search), the model may only pick people named in those pages, and code checks each name (and handle) really appears in the cited page. Every card links to its source.
+- **Two optional helpers also check public Instagram pages, best effort:** verifying AI-suggested creators to learn from, and checking whether a new username looks free. Instagram blocks these checks from cloud servers, so on the live site they degrade gracefully ("couldn't verify right now"), and hashtag pages (which always work) show real top posts instead.
 - **Production path:** Instagram's official Graph API (creators connect their own account), which would replace both helpers and unlock real top-post data.
 
 ## How the AI part works
@@ -54,6 +55,7 @@ Get a free Gemini key at https://aistudio.google.com/apikey. Without Redis env v
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | in production | Added automatically by Vercel's Upstash integration (`UPSTASH_REDIS_REST_*` also works) |
 | `GEMINI_MODELS` | no | Comma-separated model fallback chain |
 | `GROQ_API_KEY`, `GROQ_MODEL` | no | Free backup provider |
+| `TAVILY_API_KEY` | no | Web search for "creators to learn from" (free 1,000/month); without it, AI suggestions are used |
 
 ## Deploy (Vercel)
 
