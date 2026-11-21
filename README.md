@@ -6,6 +6,15 @@ Turn an Instagram handle or a one-line description into a ready-to-share creator
 
 Built as a take-home for SuperProfile's PM (AI-native, 0→1) role.
 
+## Pages
+
+| Route | What it is |
+| --- | --- |
+| `/` | Landing page: what it does, how it works, FAQ, and a 43-second launch film |
+| `/create` | The builder: handle, about you, two questions, generate, edit, publish |
+| `/s/<slug>` | A creator's published store |
+| `/demo` | A fixed sample store |
+
 ## Flow
 
 1. **Input**: Instagram handle (used as the store name/link) and a short description, plus language (English, Hinglish, हिंदी). One-liner suggestions appear from keywords in the username.
