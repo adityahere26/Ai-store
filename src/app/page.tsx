@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BrandLogo } from "@/components/Brand";
+import FilmButton from "@/components/FilmButton";
 import StorefrontView from "@/components/StorefrontView";
 import { DEMO_STOREFRONT } from "@/lib/demo";
 
@@ -151,13 +152,11 @@ export default function Landing() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <GetStarted />
-              <Link
-                href="/demo"
-                className="inline-flex min-h-14 items-center justify-center rounded-full border border-white/20 px-6 text-[16px] font-semibold text-white transition hover:bg-white/10"
-              >
-                See a sample store
-              </Link>
+              <FilmButton />
             </div>
+            <Link href="/demo" className="mt-4 inline-block text-[15px] text-white/70 underline-offset-4 hover:text-white hover:underline">
+              or see a sample store →
+            </Link>
             <ul className="mt-7 flex flex-wrap gap-x-6 gap-y-2 text-[14.5px] text-white/75">
               {["Free", "No sign-up", "Ready in about a minute"].map((t) => (
                 <li key={t} className="flex items-center gap-2">
