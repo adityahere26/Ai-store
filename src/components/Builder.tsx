@@ -389,6 +389,13 @@ export default function Builder() {
           {...{ choice, setChoice, ideas, setIdeas, files, setFiles, newPage, setNewPage }}
           handle={handle.trim().replace(/^@+/, "")}
           followers={ig.status === "found" ? ig.profile.followers : undefined}
+          ig={ig}
+          rawHandle={handle}
+          setHandle={(v) => {
+            setHandle(v);
+            setHandleMsg(null);
+          }}
+          description={description}
           onBack={() => setStage("input")}
           onBuild={generate}
         />
@@ -1021,6 +1028,141 @@ function InputScreen(props: {
   );
 }
 
+/* ---------------- Username picker for new pages ---------------- */
+
+interface HandleIdea {
+  handle: string;
+}
+
+/** New creators: pick an Instagram username and see live whether it looks free. */
+function UsernamePicker({
+  handle,
+  setHandle,
+  ig,
+  description,
+}: {
+  handle: string;
+  setHandle: (v: string) => void;
+  ig: IgPreview;
+  description: string;
+}) {
+  const [ideas, setIdeas] = useState<HandleIdea[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function suggest() {
+    setBusy(true);
+    setNote(null);
+    const r = await api<{ kind: string; suggestions: HandleIdea[]; unchecked: string[]; takenCount: number; message?: string }>(
+      "/api/handles",
+      { description: description.trim() || undefined, current: ig.status === "found" ? handle : undefined },
+      60_000,
+    );
+    setBusy(false);
+    if (!r.ok || r.data.kind !== "ok") {
+      setNote(r.data.message ?? "Couldn't suggest names right now. Try typing one instead.");
+      return;
+    }
+    const list = r.data.suggestions ?? [];
+    if (list.length) setIdeas(list);
+    else if (r.data.unchecked?.length) {
+      setIdeas(r.data.unchecked.map((h) => ({ handle: h })));
+      setNote("Couldn't reach Instagram to check these. Check them yourself before signing up.");
+    } else setNote("Every idea was already taken. Tap again for fresh ones.");
+  }
+
+  const h = handle.trim().replace(/^@+/, "").toLowerCase();
+  return (
+    <div className="rise mt-4 rounded-2xl border border-app-line p-4">
+      <p className="text-[15px] font-semibold">Pick your Instagram username</p>
+      <p className="text-[12.5px] text-app-muted">We check it on Instagram as you type.</p>
+      <div
+        className={`mt-2 flex items-center rounded-2xl border bg-app-tint px-4 focus-within:bg-app-surface ${
+          ig.status === "not_found" ? "border-[#00b67a]" : ig.status === "found" ? "border-[#f0b400]" : "border-app-line focus-within:border-app-accent"
+        }`}
+      >
+        <span className="text-lg text-app-muted">@</span>
+        <input
+          value={handle}
+          onChange={(e) => setHandle(e.target.value.replace(/^@+/, "").replace(/\s+/g, ""))}
+          placeholder="yournewhandle"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          maxLength={30}
+          aria-label="Instagram username for your new page"
+          className="min-h-12 w-full bg-transparent px-1 text-[16px] outline-none"
+        />
+        {ig.status === "loading" && <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-app-line border-t-app-accent" aria-hidden />}
+        {ig.status === "not_found" && <span className="shrink-0 text-[#00b67a]" aria-hidden>✓</span>}
+      </div>
+
+      <div aria-live="polite">
+        {ig.status === "loading" && <p className="mt-2 text-[13px] text-app-muted">Checking @{h} on Instagram…</p>}
+        {ig.status === "not_found" && (
+          <div className="mt-2 rounded-xl bg-app-mint px-3 py-2.5 text-[13.5px] text-[#00714c]">
+            <p className="font-semibold">✓ @{h} looks available. Grab it before someone else does!</p>
+            <p className="mt-0.5 text-[12px] text-[#00714c]/80">
+              We can only see public profiles, so Instagram has the final say when you sign up.{" "}
+              <a href="https://www.instagram.com/accounts/emailsignup/" target="_blank" rel="noreferrer" className="font-semibold underline">
+                Create it on Instagram ↗
+              </a>
+            </p>
+          </div>
+        )}
+        {ig.status === "found" && (
+          <div className="mt-2 rounded-xl bg-app-warn-bg px-3 py-2.5 text-[13.5px] text-app-warn-ink">
+            <p className="font-semibold">
+              ✗ @{h} is taken{ig.profile.fullName ? ` by ${ig.profile.fullName}` : ""}
+              {ig.profile.followers !== undefined ? ` · ${compactCount(ig.profile.followers)} followers` : ""}.
+            </p>
+            <p className="mt-0.5 text-[12.5px]">If it isn&apos;t yours, pick another name, otherwise we&apos;d build your store from someone else&apos;s profile.</p>
+          </div>
+        )}
+        {ig.status === "invalid" && (
+          <p className="mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-[13px] text-app-warn-ink">
+            Usernames can use letters, numbers, dots and underscores (max 30), and can&apos;t start or end with a dot.
+          </p>
+        )}
+        {ig.status === "unavailable" && <p className="mt-2 text-[13px] text-app-muted">Couldn&apos;t reach Instagram to check right now.</p>}
+      </div>
+
+      <button
+        onClick={suggest}
+        disabled={busy}
+        className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full border border-app-line px-4 text-[14px] font-semibold hover:bg-app-tint disabled:opacity-60"
+      >
+        {busy ? (
+          <>
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-app-line border-t-app-accent" aria-hidden /> Finding free names…
+          </>
+        ) : (
+          <>✨ {ideas ? "More username ideas" : "Suggest usernames"}</>
+        )}
+      </button>
+      {note && <p className="mt-2 text-[12.5px] text-app-muted">{note}</p>}
+      {ideas && ideas.length > 0 && (
+        <div className="mt-3">
+          <p className="text-[12px] font-semibold text-app-muted">Checked on Instagram, look free. Tap to use:</p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {ideas.map((i) => (
+              <button
+                key={i.handle}
+                onClick={() => setHandle(i.handle)}
+                className={`min-h-9 rounded-full border px-3 text-[13.5px] font-medium transition ${
+                  h === i.handle ? "border-app-accent bg-app-accent text-white" : "border-app-line bg-app-surface hover:border-app-accent"
+                }`}
+              >
+                @{i.handle}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Clarify screen: "Anything in mind?" ---------------- */
 
 type Choice = "ai" | "ideas" | "upload";
@@ -1066,6 +1208,10 @@ function ClarifyScreen(props: {
   followers?: number;
   newPage: boolean | null;
   setNewPage: (v: boolean) => void;
+  ig: IgPreview;
+  rawHandle: string;
+  setHandle: (v: string) => void;
+  description: string;
   choice: Choice;
   setChoice: (c: Choice) => void;
   ideas: string;
@@ -1160,6 +1306,9 @@ function ClarifyScreen(props: {
               );
             })}
           </div>
+          {props.newPage === true && (
+            <UsernamePicker handle={props.rawHandle} setHandle={props.setHandle} ig={props.ig} description={props.description} />
+          )}
         </div>
 
         {/* Q2: anything in mind? */}

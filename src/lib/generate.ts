@@ -96,7 +96,11 @@ export async function generateStorefront(input: {
     } else {
       if (ig.status === "invalid") ctx.handle = undefined;
       if (!description && !hasOwnMaterial) {
-        return { kind: "needs_description", igStatus, handle: ig.handle, message: IG_MESSAGES[ig.status] };
+        const message =
+          input.newPage && ig.status === "not_found"
+            ? `@${ig.handle} is free, nice! Now tell us in a line what your new page will be about.`
+            : IG_MESSAGES[ig.status];
+        return { kind: "needs_description", igStatus, handle: ig.handle, message };
       }
     }
   }
