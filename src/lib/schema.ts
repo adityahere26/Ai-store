@@ -158,15 +158,16 @@ export type Attachment = z.infer<typeof Attachment>;
 export const POST_FORMATS = ["reel", "carousel", "story", "live"] as const;
 
 export const LlmInspiration = z.object({
-  creators: z
+  /** Real hashtags to explore on Instagram. Hashtag pages always exist and show actual top posts. */
+  hashtags: z
     .array(
       z.object({
-        handle: z.string().min(1).max(40),
-        name: z.string().max(80),
-        why: z.string().min(10).max(160),
+        tag: z.string().min(2).max(40),
+        why: z.string().min(8).max(140),
       }),
     )
-    .max(12),
+    .min(3)
+    .max(6),
   patterns: z
     .array(
       z.object({
@@ -191,20 +192,9 @@ export const LlmInspiration = z.object({
 });
 export type LlmInspiration = z.infer<typeof LlmInspiration>;
 
-export interface InspirationCreator {
-  handle: string;
-  name: string;
-  why: string;
-  /** "verified": profile exists (checked live). "unchecked": Instagram unreachable, shown with a label. */
-  check: "verified" | "unchecked";
-  followers?: number;
-  posts?: number;
-  avatarUrl?: string;
-}
-
 export interface Inspiration {
   niche: string;
-  creators: InspirationCreator[];
+  hashtags: LlmInspiration["hashtags"];
   patterns: LlmInspiration["patterns"];
   ideas: (Omit<LlmInspiration["ideas"][number], "productTitle"> & { productTitle: string | null })[];
   createdAt: number;

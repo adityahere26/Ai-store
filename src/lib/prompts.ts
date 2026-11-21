@@ -83,8 +83,8 @@ Allowed formats: ${FORMATS.join(", ")}. For "community", the price is per month.
 
 export function creatorBlock(ctx: CreatorContext): string {
   const parts: string[] = [];
-  if (ctx.igSummary) parts.push(`INSTAGRAM PROFILE (real data, use it):\n${ctx.igSummary}`);
-  else if (ctx.handle) parts.push(`Instagram handle: @${ctx.handle} (profile could not be read; do not infer facts from the handle beyond the name)`);
+  // We never read Instagram profiles; the handle only hints at a name or brand.
+  if (ctx.handle) parts.push(`Instagram handle: @${ctx.handle} (use it only as a hint for their name or brand; don't infer any other facts from it)`);
   if (ctx.description) parts.push(`CREATOR'S OWN DESCRIPTION:\n"""${ctx.description}"""`);
   const a = ctx.about;
   if (a && Object.values(a).some((v) => v?.trim())) {

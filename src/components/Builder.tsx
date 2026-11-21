@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import StorefrontView, { compactCount, safeTheme } from "./StorefrontView";
+import StorefrontView, { safeTheme } from "./StorefrontView";
 import Sheet from "./Sheet";
 import { BrandLogo } from "./Brand";
 import { suggestOneLiners } from "@/lib/oneLiners";
@@ -16,7 +16,6 @@ import {
   THEMES,
   type CreatorContext,
   type Inspiration,
-  type InspirationCreator,
   type AboutYou,
   type Format,
   type Language,
@@ -178,8 +177,6 @@ export default function Builder() {
 
   // "Is this a new Instagram page?" (null until we can guess or they answer)
   const [newPage, setNewPage] = useState<boolean | null>(null);
-  // Live Instagram preview, lifted here so the question can be pre-filled from real follower counts.
-  const ig = useInstagramPreview(handle);
 
   // Inspiration panel
   const [inspOpen, setInspOpen] = useState(false);
@@ -258,10 +255,7 @@ export default function Builder() {
 
   function goClarify() {
     // Pre-fill from what we know; the creator can change it.
-    if (newPage === null) {
-      if (ig.status === "found") setNewPage((ig.profile.followers ?? 0) < 1000);
-      else if (!handle.trim() || ig.status === "not_found") setNewPage(true);
-    }
+    if (newPage === null && !handle.trim()) setNewPage(true); // no handle yet: most likely a new page
     setStage("clarify");
     window.scrollTo({ top: 0 });
   }
@@ -404,7 +398,7 @@ export default function Builder() {
 
       {stage === "input" && (
         <InputScreen
-          {...{ handle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved, ig }}
+          {...{ handle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved }}
           setHandle={(v) => {
             setHandle(v);
             setHandleMsg(null);
@@ -463,8 +457,6 @@ export default function Builder() {
           who={handle.trim() ? `@${handle.trim().replace(/^@+/, "")}` : `“${description.trim().slice(0, 60)}${description.trim().length > 60 ? "…" : ""}”`}
           {...{ choice, setChoice, ideas, setIdeas, files, setFiles, newPage, setNewPage }}
           handle={handle.trim().replace(/^@+/, "")}
-          followers={ig.status === "found" ? ig.profile.followers : undefined}
-          ig={ig}
           rawHandle={handle}
           setHandle={(v) => {
             setHandle(v);
@@ -758,122 +750,19 @@ export default function Builder() {
   }
 }
 
-/* ---------------- Instagram profile preview ---------------- */
-
-interface IgProfile {
-  handle: string;
-  fullName?: string;
-  bio?: string;
-  followers?: number;
-  following?: number;
-  posts?: number;
-  avatarUrl?: string;
-  isPrivate: boolean;
-}
-type IgPreview =
-  | { status: "idle" }
-  | { status: "loading"; handle: string }
-  | { status: "found"; profile: IgProfile }
-  | { status: "not_found" | "invalid" | "unavailable"; handle: string };
+/* ---------------- Handle format check (no Instagram lookups) ---------------- */
 
 const HANDLE_OK = /^(?!.*\.\.)(?!\.)[a-z0-9._]{1,30}(?<!\.)$/;
+type HandleCheck = "idle" | "invalid" | "ok";
 
-/** Debounced lookup while the creator types their handle ("Is this you?"). */
-function useInstagramPreview(rawHandle: string): IgPreview {
-  const [state, setState] = useState<IgPreview>({ status: "idle" });
-  useEffect(() => {
-    const h = rawHandle.trim().toLowerCase().replace(/^@+/, "");
-    if (!h) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when the field is cleared
-      setState({ status: "idle" });
-      return;
-    }
-    if (!HANDLE_OK.test(h)) {
-      setState({ status: "invalid", handle: h });
-      return;
-    }
-    const ctrl = new AbortController();
-    const t = setTimeout(async () => {
-      setState({ status: "loading", handle: h });
-      try {
-        const res = await fetch(`/api/instagram?handle=${encodeURIComponent(h)}`, { signal: ctrl.signal });
-        const d = await res.json();
-        setState(d.status === "found" ? { status: "found", profile: d.profile } : { status: d.status ?? "unavailable", handle: h });
-      } catch {
-        if (!ctrl.signal.aborted) setState({ status: "unavailable", handle: h });
-      }
-    }, 600);
-    return () => {
-      clearTimeout(t);
-      ctrl.abort();
-    };
-  }, [rawHandle]);
-  return state;
+/** Instant, local check of Instagram's username rules. We never query Instagram. */
+function handleCheck(raw: string): HandleCheck {
+  const h = raw.trim().toLowerCase().replace(/^@+/, "");
+  if (!h) return "idle";
+  return HANDLE_OK.test(h) ? "ok" : "invalid";
 }
 
-function IgAvatar({ p }: { p: IgProfile }) {
-  const [broken, setBroken] = useState(false);
-  if (p.avatarUrl && !broken) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={p.avatarUrl} alt="" onError={() => setBroken(true)} className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white" />;
-  }
-  return (
-    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-app-ink text-lg font-semibold text-white">
-      {(p.fullName || p.handle)[0]?.toUpperCase()}
-    </div>
-  );
-}
-
-function InstagramPreview({ preview }: { preview: IgPreview }) {
-  if (preview.status === "idle") return null;
-  if (preview.status === "loading")
-    return (
-      <div className="mt-2 flex items-center gap-3 rounded-2xl border border-app-line p-3" aria-live="polite">
-        <div className="h-14 w-14 shrink-0 rounded-full skeleton" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 w-32 skeleton" />
-          <div className="h-3 w-48 skeleton" />
-        </div>
-        <span className="sr-only">Looking up @{preview.handle}</span>
-      </div>
-    );
-  if (preview.status === "found") {
-    const p = preview.profile;
-    const stats = [
-      p.followers !== undefined && `${compactCount(p.followers)} followers`,
-      p.posts !== undefined && `${compactCount(p.posts)} posts`,
-      p.following !== undefined && `${compactCount(p.following)} following`,
-    ].filter(Boolean);
-    return (
-      <div className="rise mt-2 overflow-hidden rounded-2xl border border-app-line" aria-live="polite">
-        <div className="flex gap-3 p-3">
-          <IgAvatar p={p} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] leading-tight font-semibold">{p.fullName || `@${p.handle}`}</p>
-            <p className="truncate text-[13px] text-app-muted">@{p.handle}</p>
-            {stats.length > 0 && <p className="mt-1 text-[13px] font-medium">{stats.join(" · ")}</p>}
-          </div>
-        </div>
-        {p.bio && <p className="line-clamp-2 px-3 pb-3 text-[13.5px] leading-snug whitespace-pre-line text-app-ink/80">{p.bio}</p>}
-        <p
-          className={`px-3 py-2 text-[13px] font-medium ${
-            p.isPrivate ? "bg-app-warn-bg text-app-warn-ink" : "bg-app-mint text-[#00714c]"
-          }`}
-        >
-          {p.isPrivate
-            ? "🔒 Private account: we can see your name and followers only. Add a line about what you create below."
-            : "✓ Found you! We'll use this profile to build your store."}
-        </p>
-      </div>
-    );
-  }
-  const msg = {
-    invalid: "Handles use only letters, numbers, dots and underscores.",
-    not_found: `No Instagram account called @${preview.handle}. Check the spelling, or just describe yourself below.`,
-    unavailable: "Couldn't reach Instagram right now. Add a line about yourself below and we'll still build your store.",
-  }[preview.status];
-  return <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{msg}</p>;
-}
+const HANDLE_RULES = "Usernames can use letters, numbers, dots and underscores (max 30), and can't start or end with a dot.";
 
 /* ---------------- Input screen ---------------- */
 
@@ -894,20 +783,16 @@ function InputScreen(props: {
   question: string | null;
   descRef: React.RefObject<HTMLTextAreaElement | null>;
   saved: Draft | null;
-  ig: IgPreview;
   onSubmit: () => void;
   onResume: () => void;
   onDiscard: () => void;
 }) {
   const { handle, setHandle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved } = props;
   const canSubmit = handle.trim() || description.trim();
-  const ig = props.ig;
-  // One-liner ideas from the username (and public bio once loaded). Only when a valid handle is typed.
+  // One-liner ideas from keywords in the username. Only when a valid handle is typed.
   const cleanHandle = handle.trim().replace(/^@+/, "");
-  const oneLiners =
-    cleanHandle && ig.status !== "invalid"
-      ? suggestOneLiners(cleanHandle, ig.status === "found" ? ig.profile : undefined)
-      : null;
+  const check = handleCheck(handle);
+  const oneLiners = check === "ok" ? suggestOneLiners(cleanHandle) : null;
   return (
     <main className="min-h-dvh overflow-x-clip bg-app-tint">
       {/* Dark hero band. On mobile the form card hangs over its bottom edge; on desktop it sits beside the headline. */}
@@ -1007,16 +892,17 @@ function InputScreen(props: {
                   {handleMsg ? (
                     <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{handleMsg}</p>
                   ) : (
-                    <InstagramPreview preview={ig} />
+                    check === "invalid" ? (
+                      <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{HANDLE_RULES}</p>
+                    ) : check === "ok" ? (
+                      <p className="mt-1.5 text-[12.5px] text-app-muted">Used for your store name and @link. We don&apos;t read your Instagram profile.</p>
+                    ) : null
                   )}
                 </div>
 
                 <div>
                   <label htmlFor="desc" className="text-[15px] font-semibold">
                     What do you create, and for whom?
-                    {ig.status === "found" && !ig.profile.isPrivate && (
-                      <span className="font-normal text-app-muted"> (optional)</span>
-                    )}
                   </label>
                   {question && (
                     <p className="rise mt-2 rounded-2xl rounded-bl-sm bg-app-accent px-4 py-2.5 text-sm text-white">💬 {question}</p>
@@ -1342,51 +1228,41 @@ interface HandleIdea {
   handle: string;
 }
 
-/** New creators: pick an Instagram username and see live whether it looks free. */
-function UsernamePicker({
-  handle,
-  setHandle,
-  ig,
-  description,
-}: {
-  handle: string;
-  setHandle: (v: string) => void;
-  ig: IgPreview;
-  description: string;
-}) {
+/**
+ * New creators: pick an Instagram username. We check Instagram's format rules
+ * instantly and can brainstorm ideas, but we don't query Instagram, so the
+ * creator confirms availability when signing up.
+ */
+function UsernamePicker({ handle, setHandle, description }: { handle: string; setHandle: (v: string) => void; description: string }) {
   const [ideas, setIdeas] = useState<HandleIdea[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const check = handleCheck(handle);
+  const h = handle.trim().replace(/^@+/, "").toLowerCase();
 
   async function suggest() {
     setBusy(true);
     setNote(null);
-    const r = await api<{ kind: string; suggestions: HandleIdea[]; unchecked: string[]; takenCount: number; message?: string }>(
+    const r = await api<{ kind: string; suggestions: HandleIdea[]; message?: string }>(
       "/api/handles",
-      { description: description.trim() || undefined, current: ig.status === "found" ? handle : undefined },
-      60_000,
+      { description: description.trim() || undefined, current: check === "ok" ? h : undefined },
+      50_000,
     );
     setBusy(false);
-    if (!r.ok || r.data.kind !== "ok") {
+    if (!r.ok || r.data.kind !== "ok" || !r.data.suggestions?.length) {
       setNote(r.data.message ?? "Couldn't suggest names right now. Try typing one instead.");
       return;
     }
-    const list = r.data.suggestions ?? [];
-    if (list.length) setIdeas(list);
-    else if (r.data.unchecked?.length) {
-      setIdeas(r.data.unchecked.map((h) => ({ handle: h })));
-      setNote("Couldn't reach Instagram to check these. Check them yourself before signing up.");
-    } else setNote("Every idea was already taken. Tap again for fresh ones.");
+    setIdeas(r.data.suggestions);
   }
 
-  const h = handle.trim().replace(/^@+/, "").toLowerCase();
   return (
     <div className="rise mt-4 rounded-2xl border border-app-line p-4">
       <p className="text-[15px] font-semibold">Pick your Instagram username</p>
-      <p className="text-[12.5px] text-app-muted">We check it on Instagram as you type.</p>
+      <p className="text-[12.5px] text-app-muted">Short, easy to say and about your niche works best.</p>
       <div
         className={`mt-2 flex items-center rounded-2xl border bg-app-tint px-4 focus-within:bg-app-surface ${
-          ig.status === "not_found" ? "border-[#00b67a]" : ig.status === "found" ? "border-[#f0b400]" : "border-app-line focus-within:border-app-accent"
+          check === "invalid" ? "border-[#f0b400]" : check === "ok" ? "border-[#00b67a]" : "border-app-line focus-within:border-app-accent"
         }`}
       >
         <span className="text-lg text-app-muted">@</span>
@@ -1401,38 +1277,23 @@ function UsernamePicker({
           aria-label="Instagram username for your new page"
           className="min-h-12 w-full bg-transparent px-1 text-[16px] outline-none"
         />
-        {ig.status === "loading" && <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-app-line border-t-app-accent" aria-hidden />}
-        {ig.status === "not_found" && <span className="shrink-0 text-[#00b67a]" aria-hidden>✓</span>}
+        {check === "ok" && (
+          <span className="shrink-0 text-[#00b67a]" aria-hidden>
+            ✓
+          </span>
+        )}
       </div>
 
       <div aria-live="polite">
-        {ig.status === "loading" && <p className="mt-2 text-[13px] text-app-muted">Checking @{h} on Instagram…</p>}
-        {ig.status === "not_found" && (
-          <div className="mt-2 rounded-xl bg-app-mint px-3 py-2.5 text-[13.5px] text-[#00714c]">
-            <p className="font-semibold">✓ @{h} looks available. Grab it before someone else does!</p>
-            <p className="mt-0.5 text-[12px] text-[#00714c]/80">
-              We can only see public profiles, so Instagram has the final say when you sign up.{" "}
-              <a href="https://www.instagram.com/accounts/emailsignup/" target="_blank" rel="noreferrer" className="font-semibold underline">
-                Create it on Instagram ↗
-              </a>
-            </p>
-          </div>
-        )}
-        {ig.status === "found" && (
-          <div className="mt-2 rounded-xl bg-app-warn-bg px-3 py-2.5 text-[13.5px] text-app-warn-ink">
-            <p className="font-semibold">
-              ✗ @{h} is taken{ig.profile.fullName ? ` by ${ig.profile.fullName}` : ""}
-              {ig.profile.followers !== undefined ? ` · ${compactCount(ig.profile.followers)} followers` : ""}.
-            </p>
-            <p className="mt-0.5 text-[12.5px]">If it isn&apos;t yours, pick another name, otherwise we&apos;d build your store from someone else&apos;s profile.</p>
-          </div>
-        )}
-        {ig.status === "invalid" && (
-          <p className="mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-[13px] text-app-warn-ink">
-            Usernames can use letters, numbers, dots and underscores (max 30), and can&apos;t start or end with a dot.
+        {check === "invalid" && <p className="mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-[13px] text-app-warn-ink">{HANDLE_RULES}</p>}
+        {check === "ok" && (
+          <p className="mt-2 rounded-xl bg-app-mint px-3 py-2.5 text-[13px] text-[#00714c]">
+            ✓ @{h} is a valid username. Make sure it&apos;s free when you{" "}
+            <a href="https://www.instagram.com/accounts/emailsignup/" target="_blank" rel="noreferrer" className="font-semibold underline">
+              sign up on Instagram ↗
+            </a>
           </p>
         )}
-        {ig.status === "unavailable" && <p className="mt-2 text-[13px] text-app-muted">Couldn&apos;t reach Instagram to check right now.</p>}
       </div>
 
       <button
@@ -1442,7 +1303,7 @@ function UsernamePicker({
       >
         {busy ? (
           <>
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-app-line border-t-app-accent" aria-hidden /> Finding free names…
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-app-line border-t-app-accent" aria-hidden /> Thinking of names…
           </>
         ) : (
           <>✨ {ideas ? "More username ideas" : "Suggest usernames"}</>
@@ -1451,7 +1312,7 @@ function UsernamePicker({
       {note && <p className="mt-2 text-[12.5px] text-app-muted">{note}</p>}
       {ideas && ideas.length > 0 && (
         <div className="mt-3">
-          <p className="text-[12px] font-semibold text-app-muted">Checked on Instagram, look free. Tap to use:</p>
+          <p className="text-[12px] font-semibold text-app-muted">Tap to use. Popular names go fast, so check yours on Instagram:</p>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {ideas.map((i) => (
               <button
@@ -1513,10 +1374,8 @@ function readAsBase64(f: File): Promise<string> {
 function ClarifyScreen(props: {
   who: string;
   handle: string;
-  followers?: number;
   newPage: boolean | null;
   setNewPage: (v: boolean) => void;
-  ig: IgPreview;
   rawHandle: string;
   setHandle: (v: string) => void;
   description: string;
@@ -1591,12 +1450,9 @@ function ClarifyScreen(props: {
               "Are you just starting on Instagram?"
             )}
           </h2>
-          {props.followers !== undefined && (
-            <p className="mt-0.5 text-[13px] text-app-muted">We can see {compactCount(props.followers)} followers on this account.</p>
-          )}
           <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Is this a new Instagram page?">
             {[
-              { v: true, t: "🌱 Yes, just starting", d: "Show me top creators and what to post" },
+              { v: true, t: "🌱 Yes, just starting", d: "Help me pick a name and what to post" },
               { v: false, t: "📈 No, I already post", d: "I have an audience already" },
             ].map((o) => {
               const on = props.newPage === o.v;
@@ -1615,7 +1471,7 @@ function ClarifyScreen(props: {
             })}
           </div>
           {props.newPage === true && (
-            <UsernamePicker handle={props.rawHandle} setHandle={props.setHandle} ig={props.ig} description={props.description} />
+            <UsernamePicker handle={props.rawHandle} setHandle={props.setHandle} description={props.description} />
           )}
         </div>
 
@@ -2106,21 +1962,13 @@ function InspirationEntry({ draft, onOpen }: { draft: Draft; onOpen: () => void 
     >
       <span className="block text-[15px] font-semibold">🌱 Starting out on Instagram?</span>
       <span className="mt-0.5 block text-[13.5px] leading-snug text-app-ink/75">
-        See top creators in {draft.storefront.niche || "your niche"}, what&apos;s working, and 6 post ideas that sell your store.
+        See what&apos;s working in {draft.storefront.niche || "your niche"}, where to find top posts, and 6 post ideas that sell your store.
       </span>
       <span className="mt-2 inline-flex min-h-9 items-center rounded-full bg-app-ink px-4 text-[13px] font-semibold text-white">
         {draft.inspiration ? "Open your inspiration →" : "Get inspiration →"}
       </span>
     </button>
   );
-}
-
-function CreatorAvatar({ c }: { c: InspirationCreator }) {
-  const [broken, setBroken] = useState(false);
-  if (c.avatarUrl && !broken)
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={c.avatarUrl} alt="" onError={() => setBroken(true)} className="h-12 w-12 shrink-0 rounded-full object-cover" />;
-  return <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-app-ink font-semibold text-white">{(c.name || c.handle)[0]?.toUpperCase()}</div>;
 }
 
 function IdeaCard({ idea }: { idea: Inspiration["ideas"][number] }) {
@@ -2192,8 +2040,8 @@ function InspirationSheet({
     >
       {busy && !insp && (
         <div aria-live="polite">
-          <p className="text-[15px] font-semibold">Finding creators in {niche}…</p>
-          <p className="mt-1 text-sm text-app-muted">We check every suggested profile on Instagram, so this can take up to a minute.</p>
+          <p className="text-[15px] font-semibold">Planning your first posts for {niche}…</p>
+          <p className="mt-1 text-sm text-app-muted">Usually 10–20 seconds.</p>
           <div className="mt-5 space-y-3" aria-hidden>
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center gap-3">
@@ -2221,47 +2069,33 @@ function InspirationSheet({
 
       {insp && (
         <div className="space-y-7">
-          <section>
-            <h3 className="tight text-[20px] font-semibold">Creators to learn from</h3>
-            <p className="mt-0.5 text-[12.5px] text-app-muted">✓ Profiles checked on Instagram. Tap to see their most popular Reels.</p>
-            {insp.creators.length === 0 ? (
-              <p className="mt-3 rounded-2xl bg-app-tint p-3 text-sm text-app-muted">
-                We couldn&apos;t confirm creator suggestions for this niche right now. Try “New ideas” in a bit.
+          {(insp.hashtags?.length ?? 0) > 0 && (
+            <section>
+              <h3 className="tight text-[20px] font-semibold">Find top posts in your niche</h3>
+              <p className="mt-0.5 text-[12.5px] text-app-muted">
+                Open these hashtags on Instagram to see the most popular posts and the creators behind them.
               </p>
-            ) : (
               <ul className="mt-3 space-y-2.5">
-                {insp.creators.map((c) => (
-                  <li key={c.handle} className="flex gap-3 rounded-[18px] border border-app-line p-3">
-                    <CreatorAvatar c={c} />
+                {insp.hashtags!.map((h) => (
+                  <li key={h.tag} className="flex items-start gap-3 rounded-[18px] border border-app-line p-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-app-sky text-[18px] font-bold text-[#0047cc]">#</span>
                     <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-1.5 text-[15px] leading-tight font-semibold">
-                        <span className="truncate">{c.name || `@${c.handle}`}</span>
-                        {c.check === "verified" && (
-                          <span title="Profile checked on Instagram" className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[#0099ff] text-[9px] text-white">
-                            ✓
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-[12.5px] text-app-muted">
-                        @{c.handle}
-                        {c.followers ? ` · ${compactCount(c.followers)} followers` : ""}
-                        {c.check === "unchecked" ? " · couldn't verify right now" : ""}
-                      </p>
-                      <p className="mt-1 text-[13.5px] leading-snug text-app-ink/80">{c.why}</p>
+                      <p className="truncate text-[15px] font-semibold">#{h.tag}</p>
+                      <p className="mt-0.5 text-[13.5px] leading-snug text-app-ink/80">{h.why}</p>
                       <a
-                        href={`https://www.instagram.com/${c.handle}/reels/`}
+                        href={`https://www.instagram.com/explore/tags/${encodeURIComponent(h.tag)}/`}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-2 inline-flex min-h-8 items-center rounded-full bg-app-ink px-3 text-[12.5px] font-semibold text-white"
                       >
-                        See top Reels ↗
+                        See top posts ↗
                       </a>
                     </div>
                   </li>
                 ))}
               </ul>
-            )}
-          </section>
+            </section>
+          )}
 
           <section>
             <h3 className="tight text-[20px] font-semibold">What&apos;s working in {niche}</h3>
@@ -2391,7 +2225,7 @@ function PublishedScreen({ draft, onEdit, onNew, onInspire }: { draft: Draft; on
             className="mt-4 block w-full rounded-2xl bg-gradient-to-br from-[#e5fff1] to-[#dce8ff] px-4 py-3.5 text-left transition hover:brightness-[0.98]"
           >
             <span className="block text-[15px] font-semibold">🌱 What to post to get your first sale</span>
-            <span className="mt-0.5 block text-[13.5px] text-app-ink/75">Creators to learn from + post ideas that link to your products →</span>
+            <span className="mt-0.5 block text-[13.5px] text-app-ink/75">What&apos;s working in your niche + post ideas that link to your products →</span>
           </button>
         </div>
 

@@ -1,9 +1,10 @@
-import { lookupInstagram, igSummary, normalizeHandle, type IgResult } from "./instagram";
+import { isValidHandle, normalizeHandle } from "./instagram";
 import { generateJson, LlmError } from "./llm";
 import { SYSTEM_PROMPT, languageQuality, storefrontQuality, storefrontUserPrompt, toStorefront } from "./prompts";
 import { LlmStorefront, type AboutYou, type Attachment, type CreatorContext, type Language, type Storefront } from "./schema";
 
-export type IgStatus = IgResult["status"] | "private" | "skipped";
+/** Kept for the response shape; we no longer read Instagram profiles. */
+export type IgStatus = "skipped";
 
 export type GenerateOutcome =
   | {
@@ -20,12 +21,6 @@ export type GenerateOutcome =
   | { kind: "need_more_info"; question: string }
   | { kind: "ai_unavailable"; message: string };
 
-const IG_MESSAGES: Record<string, string> = {
-  invalid: "That doesn't look like an Instagram handle. Handles use letters, numbers, dots and underscores.",
-  not_found: "We couldn't find that Instagram account. Check the spelling, or just tell us about yourself below.",
-  unavailable: "Instagram didn't let us read that profile right now. No problem: tell us about yourself in a line or two.",
-  private: "That account is private, so we can't see your posts. Tell us what you create in a line or two.",
-};
 
 /**
  * Pull a follower count out of free text ("15K followers", "2 lakh subscribers"),
@@ -78,38 +73,17 @@ export async function generateStorefront(input: {
     language: input.language,
     followers: followersFromText(description) ?? followersFromText(ideas),
   };
-  let igStatus: IgStatus = "skipped";
-  let avatarUrl: string | undefined;
-  let fullName: string | undefined;
-  let captions = 0;
+  const igStatus: IgStatus = "skipped";
 
+  // The handle is only used as the creator's name and store link. We never read the profile.
   if (rawHandle) {
-    const ig = await lookupInstagram(rawHandle);
-    ctx.handle = ig.handle || normalizeHandle(rawHandle);
-    igStatus = ig.status;
-    if (ig.status === "found") {
-      const thin = ig.isPrivate && !ig.bio;
-      if (thin) igStatus = "private";
-      ctx = { ...ctx, igSummary: igSummary(ig), followers: ig.followers ?? ctx.followers };
-      avatarUrl = ig.avatarUrl;
-      fullName = ig.fullName;
-      captions = ig.captions.length;
-      if (thin && !description && !hasOwnMaterial) {
-        return { kind: "needs_description", igStatus, handle: ig.handle, message: IG_MESSAGES.private };
-      }
-    } else {
-      if (ig.status === "invalid") ctx.handle = undefined;
-      if (!description && !hasOwnMaterial) {
-        const message =
-          input.newPage && ig.status === "not_found"
-            ? `@${ig.handle} is free, nice! Now tell us in a line what your new page will be about.`
-            : IG_MESSAGES[ig.status];
-        return { kind: "needs_description", igStatus, handle: ig.handle, message };
-      }
-    }
+    const h = normalizeHandle(rawHandle);
+    if (isValidHandle(h)) ctx.handle = h;
+    else if (!description && !hasOwnMaterial)
+      return { kind: "needs_description", igStatus, handle: h, message: "That doesn't look like an Instagram handle. Handles use letters, numbers, dots and underscores." };
   }
 
-  if (!ctx.igSummary && !hasOwnMaterial && (!description || looksEmpty(description))) {
+  if (!hasOwnMaterial && (!description || looksEmpty(description))) {
     return {
       kind: "need_more_info",
       question: "Tell us what you teach or create, and who it's for. For example: \"I teach spoken English to college students\".",
@@ -135,10 +109,10 @@ export async function generateStorefront(input: {
     if (files.length && out.materialSummary.trim()) ctx = { ...ctx, materialSummary: out.materialSummary.trim().slice(0, 1500) };
     return {
       kind: "ok",
-      storefront: toStorefront(out, { ...ctx, avatarUrl, fullName }),
+      storefront: toStorefront(out, ctx),
       ctx,
       assumptions: out.assumptions,
-      source: { igStatus, usedInstagram: !!ctx.igSummary, captions, usedIdeas: !!ideas, files: files.length },
+      source: { igStatus, usedInstagram: false, captions: 0, usedIdeas: !!ideas, files: files.length },
       meta: { model: res.model, attempts: res.attempts, ms: Date.now() - t0 },
     };
   } catch (e) {

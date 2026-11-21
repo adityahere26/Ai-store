@@ -8,10 +8,12 @@ Built as a take-home for SuperProfile's PM (AI-native, 0→1) role.
 
 ## Flow
 
-1. **Input**: Instagram handle and/or a short description, plus language (English, Hinglish, हिंदी).
-2. **Generate**: Instagram lookup (best effort), then one structured LLM call for the whole store.
-3. **Edit**: the editor *is* the storefront. Tap any section to edit it, or rewrite just that part with AI. Undo, themes and drafts are autosaved on the device.
-4. **Publish**: public link at `/s/<slug>`, WhatsApp share, link-preview image, view/click stats.
+1. **Input**: Instagram handle (used as the store name/link) and a short description, plus language (English, Hinglish, हिंदी). One-liner suggestions appear from keywords in the username.
+2. **About you**: who you are, what you do, why follow you, social proof and a short story, written by the creator or AI-drafted from the one-liner (AI never invents social proof).
+3. **Two quick questions**: is this a new Instagram page (with a username picker), and do you already have something to sell (AI suggests / your ideas / upload an e-book, outline or rate card).
+4. **Generate**: one structured LLM call for the whole store; new pages also get inspiration (hashtags to explore, what works, 6 post ideas tied to products).
+5. **Edit**: the editor *is* the storefront. Tap any section to edit it, or rewrite just that part with AI. Undo, themes and drafts are autosaved on the device.
+6. **Publish**: public link at `/s/<slug>`, WhatsApp share, link-preview image, view/click stats.
 
 ## Stack
 
@@ -19,6 +21,10 @@ Built as a take-home for SuperProfile's PM (AI-native, 0→1) role.
 - Google Gemini (free tier) via `@google/genai`, with structured JSON output
 - Zod for validating every model response
 - Upstash Redis for published stores and view/click counters
+
+## No Instagram scraping
+
+Minute Store doesn't read Instagram profiles. Scraping is against platform terms and blocked from cloud servers, and the brief treats a short self-description as a fully valid input. The handle is only used as the creator's name and store link. The production path would be Instagram's official Graph API (creators connect their own account), which would also unlock real top-post data.
 
 ## How the AI part works
 

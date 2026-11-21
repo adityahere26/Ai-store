@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { igSummary, lookupInstagram } from "@/lib/instagram";
 import { generateJson, LlmError } from "@/lib/llm";
 import { LANGUAGE_RULE } from "@/lib/prompts";
 import { LANGUAGES } from "@/lib/schema";
@@ -7,8 +6,8 @@ import { LANGUAGES } from "@/lib/schema";
 export const maxDuration = 60;
 
 /**
- * Drafts the "About you" answers from the creator's one-liner (and public
- * Instagram profile, if any). The creator then edits them.
+ * Drafts the "About you" answers from the creator's one-liner. The creator then
+ * edits them. (We don't read Instagram profiles.)
  *
  * Honesty: who/what/why may be phrased from the input, but social proof and the
  * personal story are NEVER invented. They are only filled with facts the input
@@ -43,17 +42,12 @@ export async function POST(req: Request) {
   if (!description?.trim() && !handle?.trim())
     return Response.json({ kind: "bad_request", message: "Add a one-line description first so we have something to draft from." }, { status: 400 });
 
-  let profile = "";
-  if (handle?.trim()) {
-    const ig = await lookupInstagram(handle);
-    if (ig.status === "found") profile = igSummary(ig);
-  }
 
   try {
     const res = await generateJson({
       schema: Draft,
       system: SYSTEM,
-      user: `${profile ? `INSTAGRAM PROFILE (real data):\n${profile}\n\n` : ""}CREATOR'S ONE-LINER:\n"""${description?.trim() || "(none)"}"""
+      user: `${handle?.trim() ? `Instagram handle (name hint only): @${handle.trim().replace(/^@+/, "")}\n\n` : ""}CREATOR'S ONE-LINER:\n"""${description?.trim() || "(none)"}"""
 
 LANGUAGE: ${LANGUAGE_RULE[language]}`,
       temperature: 0.7,
