@@ -32,7 +32,7 @@ Rules:
 const MEMORY_CREATORS_RULE = `CREATORS rule: 6 to 10 REAL, well-known Indian Instagram creators in this exact niche. Prefer 100K+ followers, mixing a few big names with relatable mid-size ones. Give the exact handle without "@", spelled exactly as on Instagram. Every handle is checked live and wrong ones are discarded, so include the ones you are most sure about first. "why" = one line on what a beginner can learn from them (their style or format), not invented stats. sourceIds = [].`;
 
 function webCreatorsRule(sources: WebSource[]) {
-  return `CREATORS rule: up to 8 creators in this niche who are NAMED IN THE WEB SOURCES below (prefer Indian creators). Never add anyone who isn't in the sources. Only include non-Indian creators if the sources name fewer than 3 Indian ones. For each: name exactly as written in the source; handle without "@" only if the source shows it, otherwise ""; why = one line on what a beginner can learn from them, based on what the source says; sourceIds = the [n] numbers of the sources that mention them. Ignore sources that aren't about this niche.
+  return `CREATORS rule: up to 8 creators who are NAMED IN THE WEB SOURCES below AND whose content is about this exact niche according to the source text (prefer Indian creators). Skip general lifestyle/celebrity influencers and anyone the source describes as being in a different niche. Never add anyone who isn't in the sources. Only include non-Indian creators if the sources name fewer than 3 Indian ones. For each: name exactly as written in the source; handle without "@" only if the source shows it, otherwise ""; why = one line on what a beginner can learn from them, based on what the source says; sourceIds = the [n] numbers of the sources that mention them. Ignore sources that aren't about this niche.
 
 WEB SOURCES:
 ${sources.map((x) => `[${x.id}] ${x.title} (${x.domain})\n${x.content}`).join("\n\n")}`;
@@ -163,11 +163,23 @@ function matchProduct(title: string, s: Storefront): string | null {
 }
 
 export async function buildInspiration(ctx: CreatorContext, s: Storefront): Promise<Inspiration> {
-  // 1) Look for published creator lists on the web (not Instagram).
-  const sources = await webSearch(`top Indian Instagram ${s.niche} creators influencers to follow`, {
-    maxResults: 8,
-    excludeDomains: ["instagram.com", "facebook.com", "threads.net"],
-  });
+  // 1) Look for published creator lists on the web (not Instagram): one broad search and one on
+  //    influencer-list sites, which publish niche pages like "Top Indian yoga influencers".
+  const [general, lists] = await Promise.all([
+    webSearch(`top Indian ${s.niche} creators influencers on Instagram to follow`, {
+      maxResults: 6,
+      excludeDomains: ["instagram.com", "facebook.com", "threads.net"],
+    }),
+    webSearch(`${s.niche} influencers India Instagram`, {
+      maxResults: 6,
+      includeDomains: ["modash.io", "favikon.com", "qoruz.com", "scrumball.com", "theviralunion.com", "topinfluencersindia.com", "feedspot.com", "influencer.in"],
+    }),
+  ]);
+  const seenUrls = new Set<string>();
+  const sources = [...lists, ...general]
+    .filter((x) => !seenUrls.has(x.url) && seenUrls.add(x.url))
+    .slice(0, 10)
+    .map((x, i) => ({ ...x, id: i + 1 }));
   const webMode = sources.length >= 2;
 
   const res = await generateJson({
@@ -188,9 +200,29 @@ export async function buildInspiration(ctx: CreatorContext, s: Storefront): Prom
   const seen = new Set<string>(ctx.handle ? [ctx.handle] : []);
   let creators: InspirationCreator[] = [];
   if (webMode) creators = await groundWebCreators(res.data.creators, sources, seen);
-  // Fall back to model suggestions if the web gave us too little.
-  const first = creators.length >= 2 ? { kept: creators, dropped: [] as string[], reachable: false } : await verifyCreators(res.data.creators.filter((c) => c.handle), seen);
-  creators = first.kept;
+  // Too few from the web? Add model suggestions, but never let unchecked guesses replace sourced creators.
+  let first = { kept: [] as InspirationCreator[], dropped: [] as string[], reachable: false };
+  if (creators.length < 3) {
+    let pool = res.data.creators.filter((c) => c.handle && !c.sourceIds.length);
+    if (!pool.length && creators.length === 0) {
+      // Web mode found nobody usable: ask once from model knowledge (clearly labelled as unchecked).
+      try {
+        const mem = await generateJson({
+          schema: LlmInspiration.pick({ creators: true }),
+          system: SYSTEM,
+          user: `${promptFor(ctx, s)}\n\nOnly return "creators".`,
+          temperature: 0.7,
+          budgetMs: 25_000,
+        });
+        pool = mem.data.creators.filter((c) => c.handle);
+      } catch {
+        /* hashtags still cover this */
+      }
+    }
+    first = await verifyCreators(pool, seen);
+    const extra = creators.length ? first.kept.filter((c) => c.check === "verified") : first.kept;
+    creators = [...creators, ...extra];
+  }
 
   // Up to two correction rounds if too few handles were real: tell the model exactly what failed.
   const dropped = [...first.dropped];

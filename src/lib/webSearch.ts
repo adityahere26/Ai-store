@@ -13,7 +13,10 @@ export interface WebSource {
   content: string;
 }
 
-export async function webSearch(query: string, opts: { maxResults?: number; timeoutMs?: number; excludeDomains?: string[] } = {}): Promise<WebSource[]> {
+export async function webSearch(
+  query: string,
+  opts: { maxResults?: number; timeoutMs?: number; excludeDomains?: string[]; includeDomains?: string[] } = {},
+): Promise<WebSource[]> {
   const key = process.env.TAVILY_API_KEY;
   if (!key) return [];
   const ctrl = new AbortController();
@@ -29,6 +32,7 @@ export async function webSearch(query: string, opts: { maxResults?: number; time
         max_results: opts.maxResults ?? 8,
         include_answer: false,
         exclude_domains: opts.excludeDomains ?? [],
+        ...(opts.includeDomains?.length ? { include_domains: opts.includeDomains } : {}),
       }),
     });
     if (!res.ok) {
