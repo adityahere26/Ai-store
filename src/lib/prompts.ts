@@ -52,7 +52,7 @@ How to think:
 4. Make titles specific and outcome-led, e.g. "21-Day Home Workout Plan for Busy Moms", not "Fitness Course". Mention concrete deliverables in highlights (number of videos, sessions, pages, duration, WhatsApp support, etc.) that are realistic for one creator to deliver.
 5. Prices must rise with the ladder: entry < core < premium. Premium is never cheaper than core.
 6. Keep every product internally consistent: the title, description and highlights must agree on durations, counts and format (a "15-minute" title cannot describe a 60-minute session).
-7. Bio: first person, 2-3 short sentences, who they help + what result + a human detail from the input. The tagline is a 4-10 word hook.
+7. Bio: first person, 2-3 short sentences, who they help + what result + a human detail from the input. If the creator shared social proof, weave in the single strongest fact exactly as stated (never inflate it). If they shared a personal story, use one specific detail from it. The tagline is a 4-10 word hook.
 8. displayName: use the real name or brand from the input. If none is given, NEVER invent a personal name; use a short brand-style name from the niche (e.g. "Desk Yoga Studio") and add "We assumed your store name…" to assumptions.
 
 Honesty rules (strict):
@@ -81,6 +81,18 @@ export function creatorBlock(ctx: CreatorContext): string {
   if (ctx.igSummary) parts.push(`INSTAGRAM PROFILE (real data, use it):\n${ctx.igSummary}`);
   else if (ctx.handle) parts.push(`Instagram handle: @${ctx.handle} (profile could not be read; do not infer facts from the handle beyond the name)`);
   if (ctx.description) parts.push(`CREATOR'S OWN DESCRIPTION:\n"""${ctx.description}"""`);
+  const a = ctx.about;
+  if (a && Object.values(a).some((v) => v?.trim())) {
+    const lines = [
+      a.who?.trim() && `Who they are: ${a.who.trim()}`,
+      a.what?.trim() && `What they do/create: ${a.what.trim()}`,
+      a.why?.trim() && `Why people should follow them: ${a.why.trim()}`,
+      a.proof?.trim() && `Social proof / credibility (TRUE, stated by the creator; you may use these facts): ${a.proof.trim()}`,
+    ].filter(Boolean);
+    if (lines.length) parts.push(`ABOUT THE CREATOR (their own answers; the strongest source for the bio):\n${lines.join("\n")}`);
+    if (a.story?.trim())
+      parts.push(`THEIR PERSONAL STORY (use one specific, human detail from it in the bio; don't retell all of it):\n"""${a.story.trim()}"""`);
+  }
   if (ctx.ideas) parts.push(`PRODUCTS THE CREATOR ALREADY HAS IN MIND (build these first, origin "creator"):\n"""${ctx.ideas}"""`);
   if (ctx.materialSummary) parts.push(`FACTS FROM THE CREATOR'S UPLOADED MATERIAL:\n${ctx.materialSummary}`);
   if (ctx.newPage)

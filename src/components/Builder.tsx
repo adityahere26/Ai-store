@@ -14,6 +14,7 @@ import {
   type CreatorContext,
   type Inspiration,
   type InspirationCreator,
+  type AboutYou,
   type Format,
   type Language,
   type Product,
@@ -36,7 +37,7 @@ interface Draft {
   dirty?: boolean;
 }
 
-type Stage = "input" | "clarify" | "generating" | "edit" | "published";
+type Stage = "input" | "about" | "clarify" | "generating" | "edit" | "published";
 
 const DRAFT_KEY = "sf:draft:v1";
 
@@ -145,6 +146,33 @@ export default function Builder() {
   const [ideas, setIdeas] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
 
+  // "About you" step
+  const [about, setAbout] = useState<AboutYou>(EMPTY_ABOUT);
+  const [aboutAsk, setAboutAsk] = useState(false);
+  const [aboutSeen, setAboutSeen] = useState(false);
+  const [aiFields, setAiFields] = useState<AboutField[]>([]);
+  const [aboutBusy, setAboutBusy] = useState(false);
+  const [aboutError, setAboutError] = useState<string | null>(null);
+
+  async function draftAbout() {
+    setAboutBusy(true);
+    setAboutError(null);
+    const r = await api<{ kind: string; draft: Omit<AboutYou, "story">; message?: string }>(
+      "/api/about",
+      { description: description.trim() || undefined, handle: handle.trim() || undefined, language },
+      60_000,
+    );
+    setAboutBusy(false);
+    if (!r.ok || r.data.kind !== "ok" || !r.data.draft) {
+      setAboutError(r.data.message ?? "Couldn't draft this right now. You can write it yourself, or try again.");
+      return;
+    }
+    const d = r.data.draft;
+    // Never overwrite the story; only fill fields the AI actually drafted.
+    setAbout((cur) => ({ ...cur, who: d.who || cur.who, what: d.what || cur.what, why: d.why || cur.why, proof: d.proof || cur.proof }));
+    setAiFields((["who", "what", "why", "proof"] as const).filter((k) => d[k]?.trim()));
+  }
+
   // "Is this a new Instagram page?" (null until we can guess or they answer)
   const [newPage, setNewPage] = useState<boolean | null>(null);
   // Live Instagram preview, lifted here so the question can be pre-filled from real follower counts.
@@ -218,6 +246,14 @@ export default function Builder() {
       setQuestion("Add your Instagram handle, or tell us in a line what you create.");
       return;
     }
+    // Ask about them first (pop-up), unless they've already answered.
+    if (aboutSeen) {
+      setStage("about");
+      window.scrollTo({ top: 0 });
+    } else setAboutAsk(true);
+  }
+
+  function goClarify() {
     // Pre-fill from what we know; the creator can change it.
     if (newPage === null) {
       if (ig.status === "found") setNewPage((ig.profile.followers ?? 0) < 1000);
@@ -249,7 +285,7 @@ export default function Builder() {
       source?: Draft["source"];
       message?: string;
       question?: string;
-    }>("/api/generate", { handle: handle.trim() || undefined, description: description.trim() || undefined, language, newPage: newPage ?? undefined, ...extra });
+    }>("/api/generate", { handle: handle.trim() || undefined, description: description.trim() || undefined, language, newPage: newPage ?? undefined, about: hasAbout(about) ? about : undefined, ...extra });
 
     const d = r.data;
     if (r.ok && d?.kind === "ok" && d.storefront && d.ctx) {
@@ -383,6 +419,42 @@ export default function Builder() {
         />
       )}
 
+      {aboutAsk && stage === "input" && (
+        <AboutChoiceModal
+          oneLiner={description}
+          handle={handle.trim().replace(/^@+/, "")}
+          onClose={() => setAboutAsk(false)}
+          onWrite={() => {
+            setAboutAsk(false);
+            setAboutSeen(true);
+            setStage("about");
+            window.scrollTo({ top: 0 });
+          }}
+          onAi={() => {
+            setAboutAsk(false);
+            setAboutSeen(true);
+            setStage("about");
+            window.scrollTo({ top: 0 });
+            draftAbout();
+          }}
+          onSkip={() => {
+            setAboutAsk(false);
+            goClarify();
+          }}
+        />
+      )}
+
+      {stage === "about" && (
+        <AboutScreen
+          {...{ about, setAbout, aiFields, setAiFields }}
+          busy={aboutBusy}
+          error={aboutError}
+          onDraft={draftAbout}
+          onBack={() => setStage("input")}
+          onContinue={goClarify}
+        />
+      )}
+
       {stage === "clarify" && (
         <ClarifyScreen
           who={handle.trim() ? `@${handle.trim().replace(/^@+/, "")}` : `“${description.trim().slice(0, 60)}${description.trim().length > 60 ? "…" : ""}”`}
@@ -396,7 +468,7 @@ export default function Builder() {
             setHandleMsg(null);
           }}
           description={description}
-          onBack={() => setStage("input")}
+          onBack={() => setStage(aboutSeen ? "about" : "input")}
           onBuild={generate}
         />
       )}
@@ -1018,6 +1090,211 @@ function InputScreen(props: {
               <p className="mt-1 text-[14.5px] leading-snug text-app-ink/75 lg:mt-2 lg:text-[16px]">{c.d}</p>
             </div>
           ))}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+/* ---------------- About you: pop-up choice + questions + story ---------------- */
+
+type AboutField = keyof AboutYou;
+const EMPTY_ABOUT: AboutYou = { who: "", what: "", why: "", proof: "", story: "" };
+const hasAbout = (a: AboutYou) => Object.values(a).some((v) => v.trim());
+
+const ABOUT_QUESTIONS: { key: Exclude<AboutField, "story">; label: string; hint: string; placeholder: string; max: number }[] = [
+  { key: "who", label: "Who are you?", hint: "Your name and a line about you.", placeholder: "e.g. I'm Riya, a yoga teacher and a working mom from Pune.", max: 300 },
+  { key: "what", label: "What do you do or create?", hint: "What you teach, make or share, and for whom.", placeholder: "e.g. Short yoga routines for women who sit at a desk all day.", max: 300 },
+  { key: "why", label: "Why should someone follow you?", hint: "What they get from you that they won't get elsewhere.", placeholder: "e.g. Every routine fits in a lunch break, no mat or gym needed.", max: 300 },
+  {
+    key: "proof",
+    label: "Social proof",
+    hint: "Achievements, experience, certifications, results, press. Only real ones.",
+    placeholder: "e.g. RYT-200 certified · 6 years teaching · 300+ women in my live batches",
+    max: 400,
+  },
+];
+
+function AboutChoiceModal({
+  oneLiner,
+  handle,
+  onWrite,
+  onAi,
+  onSkip,
+  onClose,
+}: {
+  oneLiner: string;
+  handle: string;
+  onWrite: () => void;
+  onAi: () => void;
+  onSkip: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const source = oneLiner.trim() ? `“${oneLiner.trim().slice(0, 80)}${oneLiner.trim().length > 80 ? "…" : ""}”` : handle ? `your Instagram profile @${handle}` : "";
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label="Write your intro">
+      <button aria-label="Close" className="absolute inset-0 bg-[#0f0a19]/50" onClick={onClose} />
+      <div className="rise relative w-full max-w-lg rounded-t-[28px] bg-app-surface p-5 pb-[max(20px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[28px] sm:p-7">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-app-line sm:hidden" aria-hidden />
+        <h2 className="tight text-[26px] leading-tight font-medium">
+          First, <span className="font-serif-i text-[30px]">tell us about you</span>
+        </h2>
+        <p className="mt-1.5 text-[14.5px] text-app-muted">
+          Who you are, what you do, why people should follow you and your credibility. It makes your bio sound like you.
+        </p>
+        <div className="mt-5 grid gap-2.5">
+          <button onClick={onWrite} className="flex items-start gap-3 rounded-[20px] border border-app-line p-4 text-left transition hover:border-app-accent">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-app-blush text-xl">✍️</span>
+            <span>
+              <span className="block text-[16px] font-semibold">I&apos;ll write it myself</span>
+              <span className="block text-[13.5px] text-app-muted">Answer a few short questions in your own words.</span>
+            </span>
+          </button>
+          <button onClick={onAi} className="flex items-start gap-3 rounded-[20px] border-2 border-app-accent bg-app-sky/40 p-4 text-left transition hover:bg-app-sky">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-app-sky text-xl">✨</span>
+            <span className="min-w-0">
+              <span className="block text-[16px] font-semibold">Let AI draft it for me</span>
+              <span className="block text-[13.5px] text-app-muted">
+                From {source || "what you told us"}. You can edit everything.
+              </span>
+            </span>
+          </button>
+        </div>
+        <button onClick={onSkip} className="mt-3 min-h-10 w-full rounded-full text-sm font-medium text-app-muted hover:text-app-ink">
+          Skip for now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AboutScreen({
+  about,
+  setAbout,
+  aiFields,
+  setAiFields,
+  busy,
+  error,
+  onDraft,
+  onBack,
+  onContinue,
+}: {
+  about: AboutYou;
+  setAbout: (a: AboutYou) => void;
+  aiFields: AboutField[];
+  setAiFields: (f: AboutField[]) => void;
+  busy: boolean;
+  error: string | null;
+  onDraft: () => void;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const set = (k: AboutField, v: string) => {
+    setAbout({ ...about, [k]: v });
+    if (aiFields.includes(k)) setAiFields(aiFields.filter((f) => f !== k)); // edited = theirs now
+  };
+  const field =
+    "mt-1.5 w-full resize-none rounded-2xl border border-app-line bg-app-tint px-4 py-3 text-[16px] leading-relaxed outline-none focus:border-app-accent focus:bg-app-surface";
+  return (
+    <main className="min-h-dvh bg-app-tint">
+      <section className="bg-app-night px-5 pt-5 pb-16 text-white lg:pb-24">
+        <div className="mx-auto max-w-md lg:max-w-3xl lg:px-8">
+          <button onClick={onBack} className="block min-h-10 text-sm font-medium text-white/70 hover:text-white">
+            ← Back
+          </button>
+          <h1 className="tight mt-5 text-[34px] leading-[1.05] font-medium lg:text-[54px]">
+            About <span className="font-serif-i text-[38px] text-[#cfe6ff] lg:text-[60px]">you.</span>
+          </h1>
+          <p className="mt-3 text-[16px] text-white/70 lg:text-[18px]">Short answers are perfect. This is what makes your bio sound like you, not like AI.</p>
+        </div>
+      </section>
+
+      <section className="mx-auto -mt-10 max-w-md px-4 pb-32 lg:-mt-14 lg:max-w-3xl lg:px-8 lg:pb-16">
+        <div className="rounded-[24px] bg-app-surface p-5 shadow-[0_12px_40px_rgba(22,16,30,0.10)] lg:p-7">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[13px] text-app-muted">{busy ? "✨ Drafting from your one-liner…" : "Answer in your own words."}</p>
+            <button
+              onClick={onDraft}
+              disabled={busy}
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-app-line px-3.5 text-[13px] font-semibold hover:bg-app-tint disabled:opacity-60"
+            >
+              {busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-app-line border-t-app-accent" aria-hidden /> : "✨"}{" "}
+              {aiFields.length || hasAbout(about) ? "Redraft with AI" : "Draft with AI"}
+            </button>
+          </div>
+          {error && <p className="rise mt-3 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{error}</p>}
+
+          <div className="mt-4 space-y-5">
+            {ABOUT_QUESTIONS.map((q, i) => (
+              <label key={q.key} className="block">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-[15px] font-semibold">
+                    {i + 1}. {q.label}
+                  </span>
+                  {aiFields.includes(q.key) && (
+                    <span className="rounded-full bg-app-sky px-2 py-0.5 text-[11px] font-semibold text-[#0047cc]">✨ AI draft, make it yours</span>
+                  )}
+                </span>
+                <span className="block text-[12.5px] text-app-muted">{q.hint}</span>
+                {busy && !about[q.key] ? (
+                  <div className="mt-1.5 h-[104px] rounded-2xl skeleton" aria-hidden />
+                ) : (
+                  <textarea
+                    value={about[q.key]}
+                    onChange={(e) => set(q.key, e.target.value)}
+                    rows={3}
+                    maxLength={q.max}
+                    placeholder={q.placeholder}
+                    className={field}
+                  />
+                )}
+                {q.key === "proof" && !about.proof.trim() && !busy && (
+                  <span className="mt-1 block text-[12px] text-app-muted">
+                    🔒 We never make these up. If you&apos;re just starting, leave it blank. Your story can do the work.
+                  </span>
+                )}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Story box */}
+        <div className="mt-4 rounded-[24px] bg-gradient-to-br from-[#ffddf1] to-[#f9f8ff] p-5 lg:p-7">
+          <label className="block">
+            <span className="text-[16px] font-semibold">📖 Your story</span> <span className="text-[13px] text-app-muted">(optional)</span>
+            <span className="mt-0.5 block text-[13px] text-app-ink/70">
+              How did you start? A moment that changed things? A small personal story makes your bio feel human.
+            </span>
+            <textarea
+              value={about.story}
+              onChange={(e) => set("story", e.target.value)}
+              rows={5}
+              maxLength={1200}
+              placeholder="e.g. After my second baby I had back pain every day at my desk job. 10 minutes of yoga at lunch fixed it, and colleagues started joining me. That's how this page started."
+              className="mt-2 w-full resize-none rounded-2xl border border-white/60 bg-white/80 px-4 py-3 text-[16px] leading-relaxed outline-none focus:border-app-accent focus:bg-white"
+            />
+            <span className="mt-1 block text-right text-[11.5px] text-app-muted">{about.story.length}/1200</span>
+          </label>
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-app-line bg-app-surface/95 backdrop-blur lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:backdrop-blur-none">
+          <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] lg:max-w-none lg:justify-end lg:p-0">
+            <button onClick={onContinue} className="min-h-12 shrink-0 rounded-full px-4 text-sm font-medium text-app-muted hover:text-app-ink">
+              Skip
+            </button>
+            <button
+              onClick={onContinue}
+              disabled={busy}
+              className="min-h-12 flex-1 rounded-full bg-app-accent px-6 text-[16px] font-semibold text-white shadow-[0_8px_24px_rgba(0,89,255,0.35)] transition hover:brightness-110 disabled:opacity-50 lg:min-h-14 lg:flex-none lg:px-10"
+            >
+              Continue →
+            </button>
+          </div>
         </div>
       </section>
     </main>

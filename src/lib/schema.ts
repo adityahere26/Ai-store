@@ -92,6 +92,16 @@ export const Storefront = z.object({
 });
 export type Storefront = z.infer<typeof Storefront>;
 
+/** The creator's own answers about themselves (written by them or AI-drafted then edited). */
+export const AboutYou = z.object({
+  who: z.string().max(300),
+  what: z.string().max(300),
+  why: z.string().max(300),
+  proof: z.string().max(400),
+  story: z.string().max(1200),
+});
+export type AboutYou = z.infer<typeof AboutYou>;
+
 /** Context kept alongside the draft so regenerations stay on-brief. */
 export const CreatorContext = z.object({
   handle: z.string().max(40).optional(),
@@ -105,6 +115,8 @@ export const CreatorContext = z.object({
   materialSummary: z.string().max(1500).optional(),
   /** Creator said their Instagram page is new / just starting. */
   newPage: z.boolean().optional(),
+  /** "About you" answers + personal story, used for a personalised bio. */
+  about: AboutYou.partial().optional(),
 });
 export type CreatorContext = z.infer<typeof CreatorContext>;
 

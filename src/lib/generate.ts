@@ -1,7 +1,7 @@
 import { lookupInstagram, igSummary, normalizeHandle, type IgResult } from "./instagram";
 import { generateJson, LlmError } from "./llm";
 import { SYSTEM_PROMPT, storefrontQuality, storefrontUserPrompt, toStorefront } from "./prompts";
-import { LlmStorefront, type Attachment, type CreatorContext, type Language, type Storefront } from "./schema";
+import { LlmStorefront, type AboutYou, type Attachment, type CreatorContext, type Language, type Storefront } from "./schema";
 
 export type IgStatus = IgResult["status"] | "private" | "skipped";
 
@@ -58,6 +58,8 @@ export async function generateStorefront(input: {
   files?: Attachment[];
   /** Creator says their Instagram page is new. */
   newPage?: boolean;
+  /** "About you" answers + story. */
+  about?: Partial<AboutYou>;
 }): Promise<GenerateOutcome> {
   const t0 = Date.now();
   const description = input.description?.trim() || undefined;
@@ -65,12 +67,14 @@ export async function generateStorefront(input: {
   const ideas = input.ideas?.trim() || undefined;
   const files = input.files ?? [];
   // Ideas or files are enough to build from, even without a readable profile or description.
-  const hasOwnMaterial = !!ideas || files.length > 0;
+  const about = input.about && Object.values(input.about).some((v) => v?.trim()) ? input.about : undefined;
+  const hasOwnMaterial = !!ideas || files.length > 0 || !!(about?.who?.trim() || about?.what?.trim());
 
   let ctx: CreatorContext = {
     description,
     ideas,
     newPage: input.newPage || undefined,
+    about,
     language: input.language,
     followers: followersFromText(description) ?? followersFromText(ideas),
   };
