@@ -130,6 +130,20 @@ body {
   .sheet-in { animation-name: drawer-in; }
 }
 
+/* Landing page phone preview: slow scroll through the sample store and back. */
+@keyframes phone-scroll {
+  0%, 12% { transform: translateY(0) scale(0.75); }
+  50%, 62% { transform: translateY(-28%) scale(0.75); }
+  100% { transform: translateY(0) scale(0.75); }
+}
+/* The store is rendered at 133% width and scaled to 75%, so it fills the phone exactly. */
+.phone-scroll {
+  transform: scale(0.75);
+  transform-origin: top left;
+  animation: phone-scroll 16s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .phone-scroll { animation: none; }
   .skeleton, .rise, .sheet-in { animation: none; }
 }

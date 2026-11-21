@@ -1,0 +1,50 @@
+import type { Storefront } from "./schema";
+
+/** A fixed sample store for the landing page and /demo. Clearly labelled as a sample wherever it's shown. */
+export const DEMO_STOREFRONT: Storefront = {
+  displayName: "Desk Yoga with Ananya",
+  handle: "deskyoga.ananya",
+  niche: "Yoga for working women",
+  tagline: "Ten minutes a day for a pain-free back",
+  bio: "I help working women fix desk back pain with 10-minute yoga. Started at my own office desk after years of sitting 9 hours a day.",
+  language: "english",
+  theme: "classic",
+  products: [
+    {
+      id: "demo1",
+      title: "15-Minute Desk Stretch Guide",
+      format: "ebook",
+      tier: "entry",
+      priceInr: 149,
+      priceRationale: "Less than a coffee: an easy first purchase for someone new to your page.",
+      description: "Quick, illustrated stretches you can do at your desk between meetings to ease neck, shoulder and lower-back stiffness.",
+      highlights: ["20 desk-friendly stretches", "Printable one-page routine", "Works without a mat"],
+      cta: "Get the guide",
+      origin: "ai",
+    },
+    {
+      id: "demo2",
+      title: "Back-Pain Reset: Live Weekend Workshop",
+      format: "live_workshop",
+      tier: "core",
+      priceInr: 499,
+      priceRationale: "A live, interactive session priced for a mid-size audience trying you out properly.",
+      description: "A 90-minute live session on Zoom where we build a simple daily routine for desk workers, with posture checks and Q&A.",
+      highlights: ["90-minute live class", "Recording for 7 days", "Posture Q&A at the end"],
+      cta: "Book a seat",
+      origin: "ai",
+    },
+    {
+      id: "demo3",
+      title: "1:1 Posture & Routine Session",
+      format: "one_on_one",
+      tier: "premium",
+      priceInr: 1499,
+      priceRationale: "Personal attention and a custom plan, priced for limited slots each week.",
+      description: "A private 45-minute video call to check your posture and build a routine that fits your workday.",
+      highlights: ["45-minute private call", "Custom weekly routine PDF", "7-day WhatsApp follow-up"],
+      cta: "Book a call",
+      origin: "ai",
+    },
+  ],
+};

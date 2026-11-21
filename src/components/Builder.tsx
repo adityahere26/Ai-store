@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import StorefrontView, { compactCount, safeTheme } from "./StorefrontView";
 import Sheet from "./Sheet";
@@ -853,11 +854,6 @@ function useAiOneLiners(handle: string, enabled: boolean) {
 
 /* ---------------- Input screen ---------------- */
 
-const STEPS = [
-  { bg: "bg-app-blush", n: "01", t: "What to sell", d: "2 to 4 product ideas your audience already trusts you for." },
-  { bg: "bg-app-mint", n: "02", t: "How to price it", d: "INR prices that fit your niche and audience size, with the reason." },
-  { bg: "bg-app-sky", n: "03", t: "What to write", d: "Bio and product pages in English, Hinglish or Hindi. Edit anything." },
-];
 
 function InputScreen(props: {
   handle: string;
@@ -897,7 +893,9 @@ function InputScreen(props: {
           style={{ background: "radial-gradient(circle, #0099ff 0%, transparent 70%)" }}
         />
         <nav className="relative mx-auto flex max-w-md items-center justify-between px-5 pt-5 lg:max-w-6xl lg:px-8 lg:pt-7">
-          <BrandLogo size={32} className="text-[18px] lg:text-[21px]" />
+          <Link href="/" aria-label="Minute Store home">
+            <BrandLogo size={32} className="text-[18px] lg:text-[21px]" />
+          </Link>
           <div className="flex items-center gap-6">
             <span className="hidden text-sm text-white/60 lg:inline">For creators, coaches &amp; educators</span>
             <span className="rounded-full border border-white/15 px-3 py-1 text-[12px] text-white/70 lg:text-[13px]">Free · no sign-up</span>
@@ -908,17 +906,16 @@ function InputScreen(props: {
           {/* Headline */}
           <section className="px-5 pt-8 pb-8 lg:px-0 lg:pt-0 lg:pb-0">
             <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[12.5px] font-medium text-white/85">
-              <span className="rounded-full bg-app-accent px-2 py-0.5 text-[11px] font-semibold text-white">New</span>
-              AI sets up your store for you
+              <span className="rounded-full bg-app-accent px-2 py-0.5 text-[11px] font-semibold text-white">Start</span>
+              Step 1 of 3 · about a minute in total
             </p>
-            <h1 className="tight mt-4 text-[40px] leading-[1.02] font-medium lg:mt-6 lg:text-[68px] lg:leading-[0.98]">
-              Your store,
+            <h1 className="tight mt-4 text-[40px] leading-[1.02] font-medium lg:mt-6 lg:text-[64px] lg:leading-[0.98]">
+              Let&apos;s build
               <br />
-              <span className="font-serif-i text-[46px] text-[#cfe6ff] lg:text-[78px]">ready in a minute.</span>
+              <span className="font-serif-i text-[46px] text-[#cfe6ff] lg:text-[74px]">your store.</span>
             </h1>
             <p className="mt-4 text-[16px] leading-relaxed text-white/70 lg:mt-6 lg:max-w-lg lg:text-[19px]">
-              Tell us who you are. We&apos;ll suggest what to sell, price it for Indian buyers and write your page. You can change
-              everything.
+              Start with your Instagram handle and one line about what you do. Next, a few quick questions, then your store.
             </p>
             <ul className="mt-8 hidden flex-wrap gap-x-6 gap-y-2 text-[15px] text-white/75 lg:flex">
               {["Products that fit your niche", "₹ pricing with the reason", "English, Hinglish, हिंदी"].map((t) => (
@@ -1094,24 +1091,6 @@ function InputScreen(props: {
         </div>
       </div>
 
-      {/* How it works: pastel cards */}
-      <section className="mx-auto max-w-md px-4 pt-4 pb-12 lg:max-w-6xl lg:px-8 lg:pt-20 lg:pb-24">
-        <h2 className="tight text-[24px] font-medium lg:text-center lg:text-[44px]">
-          From blank page <span className="font-serif-i text-[28px] lg:text-[50px]">to first sale</span>
-        </h2>
-        <p className="mt-2 hidden text-center text-[17px] text-app-muted lg:block">
-          The three things new creators get stuck on, done for you in one go.
-        </p>
-        <div className="mt-4 grid gap-3 lg:mt-12 lg:grid-cols-3 lg:gap-6">
-          {STEPS.map((c) => (
-            <div key={c.n} className={`${c.bg} rounded-[20px] p-5 lg:min-h-[220px] lg:rounded-[28px] lg:p-8`}>
-              <p className="text-[12px] font-semibold text-app-muted lg:text-[14px]">{c.n}</p>
-              <p className="mt-1 text-[19px] font-semibold tracking-tight lg:mt-10 lg:text-[26px]">{c.t}</p>
-              <p className="mt-1 text-[14.5px] leading-snug text-app-ink/75 lg:mt-2 lg:text-[16px]">{c.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
     </main>
   );
 }

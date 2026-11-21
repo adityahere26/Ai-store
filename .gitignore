@@ -44,3 +44,6 @@ PM_Assignment_*.pdf
 
 # original brand source files (processed copies live in public/brand and src/app)
 /Logo and Banner Page/
+
+# local browser test profiles (never in the project)
+*-prof/
