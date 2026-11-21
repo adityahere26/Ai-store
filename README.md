@@ -22,9 +22,11 @@ Built as a take-home for SuperProfile's PM (AI-native, 0→1) role.
 - Zod for validating every model response
 - Upstash Redis for published stores and view/click counters
 
-## No Instagram scraping
+## Instagram: what we do and don't read
 
-Minute Store doesn't read Instagram profiles. Scraping is against platform terms and blocked from cloud servers, and the brief treats a short self-description as a fully valid input. The handle is only used as the creator's name and store link. The production path would be Instagram's official Graph API (creators connect their own account), which would also unlock real top-post data.
+- **The creator's own handle is never looked up.** It's used only as their store name and @link; the store is built from their own words (description, About-you answers, ideas or uploads). The brief treats a self-description as a fully valid input.
+- **Two optional helpers check public Instagram pages, best effort:** verifying AI-suggested creators to learn from, and checking whether a new username looks free. Instagram blocks these checks from cloud servers, so on the live site they degrade gracefully ("couldn't verify right now"), and hashtag pages (which always work) show real top posts instead.
+- **Production path:** Instagram's official Graph API (creators connect their own account), which would replace both helpers and unlock real top-post data.
 
 ## How the AI part works
 
