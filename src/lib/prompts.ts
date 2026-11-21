@@ -68,6 +68,12 @@ When to stop and ask instead:
 
 suggestedTheme: "classic" (clean white and blue, for education, exam prep, finance, business, careers), "midnight" (bold dark, for tech, design, fitness, gaming, music), "blush" (soft pastel, for lifestyle, food, fashion, beauty, astrology, wellness, parenting).
 
+The creator's own ideas and files (when provided) come first:
+- If the creator lists products they sell or want to sell, build those products first. Keep their titles' meaning, their formats and, if they gave one, their exact price. Mark them origin "creator". Then add complementary products (origin "ai") to fill a sensible ladder, up to 4 in total.
+- If files are attached (e-book, course outline, rate card, brochure, screenshot), treat them as the creator's real material: extract real product names, prices, durations and contents from them; mark those products origin "creator". Don't copy long passages. Summarise the useful facts from the files in materialSummary (max ~120 words); otherwise materialSummary is "".
+- A creator's price outside the usual band is their decision: keep it, and use priceRationale to note gently how it compares.
+- Everything you suggest yourself is origin "ai".
+
 Allowed formats: ${FORMATS.join(", ")}. For "community", the price is per month.`;
 
 export function creatorBlock(ctx: CreatorContext): string {
@@ -75,11 +81,16 @@ export function creatorBlock(ctx: CreatorContext): string {
   if (ctx.igSummary) parts.push(`INSTAGRAM PROFILE (real data, use it):\n${ctx.igSummary}`);
   else if (ctx.handle) parts.push(`Instagram handle: @${ctx.handle} (profile could not be read; do not infer facts from the handle beyond the name)`);
   if (ctx.description) parts.push(`CREATOR'S OWN DESCRIPTION:\n"""${ctx.description}"""`);
+  if (ctx.ideas) parts.push(`PRODUCTS THE CREATOR ALREADY HAS IN MIND (build these first, origin "creator"):\n"""${ctx.ideas}"""`);
+  if (ctx.materialSummary) parts.push(`FACTS FROM THE CREATOR'S UPLOADED MATERIAL:\n${ctx.materialSummary}`);
   return parts.join("\n\n");
 }
 
-export function storefrontUserPrompt(ctx: CreatorContext): string {
-  return `${creatorBlock(ctx)}
+export function storefrontUserPrompt(ctx: CreatorContext, fileNames: string[] = []): string {
+  const files = fileNames.length
+    ? `\n\nATTACHED FILES from the creator (${fileNames.join(", ")}): read them carefully; they describe what the creator really sells.`
+    : "";
+  return `${creatorBlock(ctx)}${files}
 
 ${pricingGuideForPrompt(ctx.followers)}
 
@@ -103,13 +114,18 @@ export function storefrontQuality(out: LlmStorefront): string[] {
   if (out.products.length < 2) issues.push("Return 2 to 4 products.");
   if (!out.bio.trim() || out.bio.length < 40) issues.push("Bio is missing or too short.");
   if (!out.displayName.trim()) issues.push("displayName is empty.");
-  const formats = new Set(out.products.map((p) => p.format));
-  if (formats.size < out.products.length) issues.push("Each product must use a different format.");
-  if (!out.products.some((p) => p.tier === "entry")) issues.push("Include one entry-tier product.");
-  const maxPrice = (t: string) => Math.max(0, ...out.products.filter((p) => p.tier === t).map((p) => p.priceInr));
-  const minPrice = (t: string) => Math.min(Infinity, ...out.products.filter((p) => p.tier === t).map((p) => p.priceInr));
-  if (maxPrice("entry") > minPrice("core") || maxPrice("core") > minPrice("premium") || maxPrice("entry") > minPrice("premium"))
-    issues.push("Prices must rise with tier: entry < core < premium.");
+  // Ladder rules apply to our suggestions only; the creator's real catalogue is theirs to shape
+  // (they may sell two e-books, or have no low-ticket product yet).
+  const creatorLed = out.products.some((p) => p.origin === "creator");
+  if (!creatorLed) {
+    const formats = new Set(out.products.map((p) => p.format));
+    if (formats.size < out.products.length) issues.push("Each product must use a different format.");
+    if (!out.products.some((p) => p.tier === "entry")) issues.push("Include one entry-tier product.");
+    const maxPrice = (t: string) => Math.max(0, ...out.products.filter((p) => p.tier === t).map((p) => p.priceInr));
+    const minPrice = (t: string) => Math.min(Infinity, ...out.products.filter((p) => p.tier === t).map((p) => p.priceInr));
+    if (maxPrice("entry") > minPrice("core") || maxPrice("core") > minPrice("premium") || maxPrice("entry") > minPrice("premium"))
+      issues.push("Prices must rise with tier: entry < core < premium.");
+  }
   const titles = out.products.map((p) => p.title.toLowerCase());
   if (new Set(titles).size < titles.length) issues.push("Product titles must be distinct.");
   const allText = [out.bio, out.tagline, ...out.products.flatMap((p) => [p.title, p.description, ...p.highlights])].join(" ");
@@ -132,6 +148,8 @@ export function productQuality(p: z.infer<typeof LlmProduct>, others: Product[])
 const TIER_ORDER = { entry: 0, core: 1, premium: 2 } as const;
 
 export function finalizeProduct(p: z.infer<typeof LlmProduct>, followers?: number): Product {
+  // The creator's own price is their call; guardrails only correct prices the model invented.
+  if (p.origin === "creator") return { ...p, id: nanoid(8), priceInr: Math.max(0, Math.round(p.priceInr)) };
   const { price, adjusted } = guardPrice(p.format, p.priceInr, followers);
   return { ...p, id: nanoid(8), priceInr: price, priceAdjusted: adjusted || undefined };
 }
@@ -194,6 +212,7 @@ ${pricingGuideForPrompt(ctx.followers)}
 Replace product #${index + 1} ("${cur.title}", ${cur.format}, ₹${cur.priceInr}) with a better or fresher idea. Keep the "${cur.tier}" tier unless the creator asks otherwise. It must not duplicate the other products' formats or topics.${
     instruction ? `\nCreator's request: "${instruction}"` : ""
   }
+${cur.origin === "creator" ? `This product came from the creator. If you keep the same product and only improve it, set origin "creator" and keep their price unless asked to change it. If you replace it with a different idea, set origin "ai".` : `Set origin "ai".`}
 Honesty: no invented facts or testimonials. Avoid: ${BANNED.join(", ")}.
 LANGUAGE: ${LANGUAGE_RULE[s.language]}`;
 }

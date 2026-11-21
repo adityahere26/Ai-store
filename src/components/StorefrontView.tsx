@@ -176,6 +176,9 @@ export default function StorefrontView({ storefront: s, mode, onEditBio, onEditP
                         <span aria-hidden>{FORMAT_ICON[p.format]} </span>
                         {FORMAT_LABEL[p.format]}
                       </span>
+                      {editing && p.origin === "creator" ? (
+                        <span className="rounded-full bg-[#0059ff] px-2 py-0.5 text-[11px] font-semibold text-white">💡 Your idea</span>
+                      ) : null}
                       {p.tier === "premium" && <span className="text-[12px] font-semibold">⚡ Limited spots</span>}
                       {p.tier === "entry" && <span className="text-[12px] font-semibold">Best place to start</span>}
                     </div>

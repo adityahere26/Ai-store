@@ -38,6 +38,8 @@ export const LlmProduct = z.object({
   description: z.string().min(40).max(500),
   highlights: z.array(z.string().min(3).max(90)).min(2).max(4),
   cta: z.string().min(2).max(24),
+  /** "creator" = came from the creator's own ideas or uploaded material. */
+  origin: z.enum(["creator", "ai"]),
 });
 
 export const LlmStorefront = z.object({
@@ -50,6 +52,8 @@ export const LlmStorefront = z.object({
   assumptions: z.array(z.string().max(140)).max(3),
   suggestedTheme: z.enum(THEMES),
   products: z.array(LlmProduct).max(4),
+  /** Facts pulled from uploaded files, kept so later regenerations stay grounded. Empty if no files. */
+  materialSummary: z.string().max(1500),
 });
 export type LlmStorefront = z.infer<typeof LlmStorefront>;
 
@@ -70,6 +74,7 @@ export const Product = LlmProduct.extend({
   highlights: z.array(z.string().max(160)).max(6),
   cta: z.string().min(1).max(40),
   priceInr: z.number().int().min(0).max(500000),
+  origin: z.enum(["creator", "ai"]).optional(), // older drafts lack it
 });
 export type Product = z.infer<typeof Product>;
 
@@ -94,5 +99,23 @@ export const CreatorContext = z.object({
   igSummary: z.string().max(3000).optional(),
   followers: z.number().int().nonnegative().optional(),
   language: z.enum(LANGUAGES),
+  /** What the creator already sells or wants to sell, in their words. */
+  ideas: z.string().max(1000).optional(),
+  /** Summary of uploaded files (the files themselves are never stored). */
+  materialSummary: z.string().max(1500).optional(),
 });
 export type CreatorContext = z.infer<typeof CreatorContext>;
+
+/* ---------- Uploaded material (read once by the model, never stored) ---------- */
+
+export const ATTACHMENT_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp", "text/plain"] as const;
+export const MAX_FILES = 3;
+/** Raw bytes across all files. Base64 adds ~33%, keeping requests under Vercel's 4.5 MB body limit. */
+export const MAX_TOTAL_BYTES = 3 * 1024 * 1024;
+
+export const Attachment = z.object({
+  name: z.string().max(120),
+  mimeType: z.enum(ATTACHMENT_TYPES),
+  data: z.string().max(4_200_000), // base64
+});
+export type Attachment = z.infer<typeof Attachment>;

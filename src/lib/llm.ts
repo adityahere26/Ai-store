@@ -30,9 +30,17 @@ export class LlmError extends Error {
   }
 }
 
+/** A file the model should read alongside the prompt (PDF, image, plain text). */
+export interface FilePart {
+  mimeType: string;
+  data: string; // base64
+}
+
 interface Candidate {
   id: string;
-  call(system: string, user: string, jsonSchema: unknown, timeoutMs: number, temperature: number): Promise<string>;
+  /** Whether this provider can read attached files natively. */
+  files: boolean;
+  call(system: string, user: string, jsonSchema: unknown, timeoutMs: number, temperature: number, files?: FilePart[]): Promise<string>;
 }
 
 /* ---------------- Gemini ---------------- */
@@ -60,7 +68,8 @@ function classify(model: string, e: unknown, aborted: boolean, timeoutMs: number
 function geminiCandidate(model: string): Candidate {
   return {
     id: model,
-    async call(system, user, jsonSchema, timeoutMs, temperature) {
+    files: true,
+    async call(system, user, jsonSchema, timeoutMs, temperature, files) {
       if (!process.env.GEMINI_API_KEY) throw new LlmError("config", "GEMINI_API_KEY is not set");
       gemini ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const ctrl = new AbortController();
@@ -68,7 +77,9 @@ function geminiCandidate(model: string): Candidate {
       try {
         const res = await gemini.models.generateContent({
           model,
-          contents: [{ role: "user", parts: [{ text: user }] }],
+          contents: [
+            { role: "user", parts: [{ text: user }, ...(files ?? []).map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } }))] },
+          ],
           config: {
             systemInstruction: system,
             responseMimeType: "application/json",
@@ -93,6 +104,7 @@ function geminiCandidate(model: string): Candidate {
 function groqCandidate(model: string): Candidate {
   return {
     id: `groq:${model}`,
+    files: false,
     async call(system, user, jsonSchema, timeoutMs, temperature) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -195,6 +207,8 @@ export interface GenerateOpts<T> {
   temperature?: number;
   /** Total wall-clock budget for all attempts. */
   budgetMs?: number;
+  /** Files for the model to read (only providers that support files are tried). */
+  files?: FilePart[];
 }
 
 export interface GenerateResult<T> {
@@ -205,7 +219,7 @@ export interface GenerateResult<T> {
 }
 
 export async function generateJson<T>(opts: GenerateOpts<T>): Promise<GenerateResult<T>> {
-  const { schema, system, user, qualityCheck, temperature = 0.8, budgetMs = 75_000 } = opts;
+  const { schema, system, user, qualityCheck, temperature = 0.8, budgetMs = 75_000, files } = opts;
   const jsonSchema = toJsonSchema(schema);
   const deadline = Date.now() + budgetMs;
   const left = () => deadline - Date.now();
@@ -216,7 +230,7 @@ export async function generateJson<T>(opts: GenerateOpts<T>): Promise<GenerateRe
   let lastErr: LlmError | null = null;
   let best: { data: T; model: string; issues: number } | null = null;
 
-  const queue = ordered();
+  const queue = ordered().filter((c) => !files?.length || c.files);
   const retriedInvalid = new Set<string>();
   for (let qi = 0; qi < queue.length; qi++) {
     if (left() < 6_000) break;
@@ -225,7 +239,8 @@ export async function generateJson<T>(opts: GenerateOpts<T>): Promise<GenerateRe
     const t0 = Date.now();
     let text: string;
     try {
-      text = await c.call(system, prompt, jsonSchema, Math.min(30_000, left() - 1_000), temperature);
+      // Reading files takes longer, so allow a bit more per attempt.
+      text = await c.call(system, prompt, jsonSchema, Math.min(files?.length ? 40_000 : 30_000, left() - 1_000), temperature, files);
       coolUntil.delete(c.id);
     } catch (e) {
       lastErr = e as LlmError;

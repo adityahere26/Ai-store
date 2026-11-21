@@ -5,6 +5,9 @@ import StorefrontView, { compactCount, safeTheme } from "./StorefrontView";
 import Sheet from "./Sheet";
 import { formatInr, priceBand } from "@/lib/pricing";
 import {
+  ATTACHMENT_TYPES,
+  MAX_FILES,
+  MAX_TOTAL_BYTES,
   FORMATS,
   FORMAT_LABEL,
   THEMES,
@@ -22,12 +25,12 @@ interface Draft {
   storefront: Storefront;
   ctx: CreatorContext;
   assumptions: string[];
-  source: { usedInstagram: boolean; captions: number; igStatus: string };
+  source: { usedInstagram: boolean; captions: number; igStatus: string; usedIdeas?: boolean; files?: number };
   publish?: { slug: string; editToken: string; publishedAt: number };
   dirty?: boolean;
 }
 
-type Stage = "input" | "generating" | "edit" | "published";
+type Stage = "input" | "clarify" | "generating" | "edit" | "published";
 
 const DRAFT_KEY = "sf:draft:v1";
 
@@ -96,6 +99,18 @@ function saveDraft(d: Draft | null) {
   }
 }
 
+/** "Built from your Instagram profile, your ideas and 1 file." */
+function sourceLine(d: Draft): string {
+  const parts: string[] = [];
+  if (d.source.usedInstagram) parts.push(d.source.captions ? `your Instagram bio and ${d.source.captions} recent posts` : "your Instagram profile");
+  if (d.ctx.description) parts.push("your description");
+  if (d.source.usedIdeas) parts.push("your product ideas");
+  if (d.source.files) parts.push(d.source.files === 1 ? "your file" : `your ${d.source.files} files`);
+  if (!parts.length) return "Built from your details.";
+  const last = parts.pop();
+  return `Built from ${parts.length ? `${parts.join(", ")} and ${last}` : last}.`;
+}
+
 /* ---------------- main component ---------------- */
 
 export default function Builder() {
@@ -118,6 +133,11 @@ export default function Builder() {
   const [busy, setBusy] = useState<{ bio?: boolean; product?: number | null; all?: boolean }>({});
   const [publishing, setPublishing] = useState(false);
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
+
+  // "Anything in mind?" step
+  const [choice, setChoice] = useState<Choice>("ai");
+  const [ideas, setIdeas] = useState("");
+  const [files, setFiles] = useState<PickedFile[]>([]);
 
   useEffect(() => {
     const d = loadDraft();
@@ -156,14 +176,32 @@ export default function Builder() {
 
   /* ---------- generate ---------- */
 
-  async function generate() {
+  /** Build pressed on the input screen: ask the one question first. */
+  function askFirst() {
     setHandleMsg(null);
     setQuestion(null);
     if (!handle.trim() && !description.trim()) {
       setQuestion("Add your Instagram handle, or tell us in a line what you create.");
       return;
     }
+    setStage("clarify");
+    window.scrollTo({ top: 0 });
+  }
+
+  async function generate(useChoice: Choice = choice) {
     setStage("generating");
+    window.scrollTo({ top: 0 });
+    let attachments: { name: string; mimeType: string; data: string }[] = [];
+    if (useChoice === "upload" && files.length) {
+      try {
+        attachments = await Promise.all(files.map(async (f) => ({ name: f.name, mimeType: f.mimeType, data: await readAsBase64(f.file) })));
+      } catch {
+        setStage("clarify");
+        showError("Couldn't read that file. Please try choosing it again.");
+        return;
+      }
+    }
+    const extra = useChoice === "ai" ? {} : { ideas: ideas.trim() || undefined, files: attachments.length ? attachments : undefined };
     const r = await api<{
       kind: string;
       storefront?: Storefront;
@@ -172,7 +210,7 @@ export default function Builder() {
       source?: Draft["source"];
       message?: string;
       question?: string;
-    }>("/api/generate", { handle: handle.trim() || undefined, description: description.trim() || undefined, language });
+    }>("/api/generate", { handle: handle.trim() || undefined, description: description.trim() || undefined, language, ...extra });
 
     const d = r.data;
     if (r.ok && d?.kind === "ok" && d.storefront && d.ctx) {
@@ -289,7 +327,7 @@ export default function Builder() {
             setHandle(v);
             setHandleMsg(null);
           }}
-          onSubmit={generate}
+          onSubmit={askFirst}
           onResume={() => {
             if (!saved) return;
             setDraft(saved);
@@ -302,7 +340,18 @@ export default function Builder() {
         />
       )}
 
-      {stage === "generating" && <GeneratingScreen handle={handle.trim()} />}
+      {stage === "clarify" && (
+        <ClarifyScreen
+          who={handle.trim() ? `@${handle.trim().replace(/^@+/, "")}` : `“${description.trim().slice(0, 60)}${description.trim().length > 60 ? "…" : ""}”`}
+          {...{ choice, setChoice, ideas, setIdeas, files, setFiles }}
+          onBack={() => setStage("input")}
+          onBuild={generate}
+        />
+      )}
+
+      {stage === "generating" && (
+        <GeneratingScreen handle={handle.trim()} files={choice === "upload" ? files.length : 0} ideas={choice !== "ai" && !!ideas.trim()} />
+      )}
 
       {stage === "edit" && draft && (
         <div className="min-h-dvh lg:bg-[#f1f0f8]">
@@ -349,9 +398,7 @@ export default function Builder() {
                   Your <span className="font-serif-i text-[32px]">store</span>
                 </h2>
                 <p className="rounded-2xl bg-app-sky px-4 py-3 text-[14px] leading-snug text-app-ink">
-                  {draft.source.usedInstagram
-                    ? `Built from your Instagram${draft.source.captions ? ` bio and ${draft.source.captions} recent posts` : " profile"}${draft.ctx.description ? " plus your description" : ""}.`
-                    : "Built from your description."}{" "}
+                  {sourceLine(draft)}{" "}
                   <span className="font-semibold">
                     <span className="lg:hidden">Tap</span>
                     <span className="hidden lg:inline">Click</span> any section to edit or rewrite it.
@@ -922,11 +969,271 @@ function InputScreen(props: {
   );
 }
 
+/* ---------------- Clarify screen: "Anything in mind?" ---------------- */
+
+type Choice = "ai" | "ideas" | "upload";
+
+interface PickedFile {
+  file: File;
+  name: string;
+  size: number;
+  mimeType: (typeof ATTACHMENT_TYPES)[number];
+}
+
+const CHOICES: { id: Choice; icon: string; title: string; desc: string; tint: string }[] = [
+  { id: "ai", icon: "✨", title: "Let AI suggest", desc: "Not sure yet? We'll pick products and prices for you.", tint: "bg-app-sky" },
+  { id: "ideas", icon: "💡", title: "I have ideas", desc: "Tell us what you sell or want to sell. We'll build around it.", tint: "bg-app-blush" },
+  { id: "upload", icon: "📎", title: "Upload what I have", desc: "E-book, course outline, rate card or a screenshot from your phone.", tint: "bg-app-mint" },
+];
+
+function fileMime(f: File): PickedFile["mimeType"] | null {
+  const t = f.type.toLowerCase();
+  if ((ATTACHMENT_TYPES as readonly string[]).includes(t)) return t as PickedFile["mimeType"];
+  if (t === "image/jpg") return "image/jpeg";
+  if (t === "text/markdown" || /\.(txt|md)$/i.test(f.name)) return "text/plain";
+  if (!t && /\.pdf$/i.test(f.name)) return "application/pdf";
+  return null;
+}
+
+function prettySize(n: number) {
+  return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function readAsBase64(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(f);
+  });
+}
+
+function ClarifyScreen(props: {
+  who: string;
+  choice: Choice;
+  setChoice: (c: Choice) => void;
+  ideas: string;
+  setIdeas: (s: string) => void;
+  files: PickedFile[];
+  setFiles: (f: PickedFile[]) => void;
+  onBack: () => void;
+  onBuild: (choice?: Choice) => void;
+}) {
+  const { choice, setChoice, ideas, setIdeas, files, setFiles } = props;
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = (list: FileList | null) => {
+    if (!list?.length) return;
+    setFileError(null);
+    const next = [...files];
+    for (const f of Array.from(list)) {
+      const mimeType = fileMime(f);
+      if (!mimeType) {
+        setFileError(`"${f.name}" isn't supported. Use PDF, JPG, PNG, WEBP or TXT.`);
+        continue;
+      }
+      if (next.length >= MAX_FILES) {
+        setFileError(`You can add up to ${MAX_FILES} files.`);
+        break;
+      }
+      if (next.some((x) => x.name === f.name && x.size === f.size)) continue;
+      if (next.reduce((n, x) => n + x.size, 0) + f.size > MAX_TOTAL_BYTES) {
+        setFileError("That's over 3 MB in total. Try a smaller file or a screenshot of the key page.");
+        continue;
+      }
+      next.push({ file: f, name: f.name, size: f.size, mimeType });
+    }
+    setFiles(next);
+  };
+
+  const ready = choice === "ai" || (choice === "ideas" && ideas.trim().length > 0) || (choice === "upload" && files.length > 0);
+
+  return (
+    <main className="min-h-dvh bg-app-tint">
+      <section className="bg-app-night px-5 pt-5 pb-16 text-white lg:pb-24">
+        <div className="mx-auto max-w-md lg:max-w-5xl lg:px-8">
+          <button onClick={props.onBack} className="block min-h-10 text-sm font-medium text-white/70 hover:text-white">
+            ← Back
+          </button>
+          <p className="mt-5 flex w-fit max-w-full items-center gap-2 truncate rounded-full bg-white/10 px-3 py-1 text-[12.5px] text-white/80">
+            Building for <span className="truncate font-semibold text-white">{props.who}</span>
+          </p>
+          <h1 className="tight mt-4 text-[34px] leading-[1.05] font-medium lg:text-[56px]">
+            Before we build, <span className="font-serif-i text-[38px] text-[#cfe6ff] lg:text-[64px]">one quick question.</span>
+          </h1>
+          <p className="mt-3 text-[16px] text-white/70 lg:text-[19px]">Do you already have something you sell, or want to sell?</p>
+        </div>
+      </section>
+
+      <section className="mx-auto -mt-10 max-w-md px-4 pb-32 lg:-mt-14 lg:max-w-5xl lg:px-8 lg:pb-16">
+        <div className="grid gap-3 lg:grid-cols-3 lg:gap-5" role="radiogroup" aria-label="What should we build from?">
+          {CHOICES.map((c) => {
+            const on = choice === c.id;
+            return (
+              <button
+                key={c.id}
+                role="radio"
+                aria-checked={on}
+                onClick={() => {
+                  setChoice(c.id);
+                  if (c.id === "upload" && files.length === 0) setTimeout(() => inputRef.current?.click(), 50);
+                }}
+                className={`relative flex items-start gap-4 rounded-[22px] bg-app-surface p-4 text-left shadow-[0_8px_30px_rgba(22,16,30,0.08)] transition lg:flex-col lg:gap-3 lg:p-6 ${
+                  on ? "ring-2 ring-app-accent" : "ring-1 ring-app-line hover:ring-app-muted"
+                }`}
+              >
+                <span className={`${c.tint} grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl lg:h-14 lg:w-14`}>{c.icon}</span>
+                <span className="min-w-0">
+                  <span className="block text-[17px] font-semibold tracking-tight lg:text-[19px]">{c.title}</span>
+                  <span className="mt-0.5 block text-[14px] leading-snug text-app-muted">{c.desc}</span>
+                </span>
+                <span
+                  aria-hidden
+                  className={`absolute top-4 right-4 grid h-6 w-6 place-items-center rounded-full border-2 text-[12px] font-bold ${
+                    on ? "border-app-accent bg-app-accent text-white" : "border-app-line"
+                  }`}
+                >
+                  {on ? "✓" : ""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Detail panel for the chosen option */}
+        <div className="mt-4 rounded-[22px] bg-app-surface p-5 shadow-[0_8px_30px_rgba(22,16,30,0.06)] lg:mt-6 lg:p-7">
+          {choice === "ai" && (
+            <p className="text-[15px] text-app-ink/80">
+              We&apos;ll suggest 2–4 products with India-friendly prices, based on your profile. You can edit or rewrite anything afterwards.
+            </p>
+          )}
+
+          {choice === "ideas" && (
+            <label className="block">
+              <span className="text-[15px] font-semibold">What do you sell, or want to sell?</span>
+              <textarea
+                autoFocus
+                value={ideas}
+                onChange={(e) => setIdeas(e.target.value)}
+                rows={4}
+                maxLength={1000}
+                placeholder={"e.g. A 30-recipe e-book for ₹299, and 1:1 diet plan calls.\nMaybe a monthly WhatsApp group later."}
+                className="mt-2 w-full resize-none rounded-2xl border border-app-line bg-app-tint px-4 py-3 text-[16px] leading-relaxed outline-none focus:border-app-accent focus:bg-app-surface"
+              />
+              <span className="mt-1 block text-xs text-app-muted">Add prices if you know them. We&apos;ll keep your prices as they are.</span>
+            </label>
+          )}
+
+          {choice === "upload" && (
+            <div>
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  addFiles(e.dataTransfer.files);
+                }}
+                className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-7 text-center transition ${
+                  dragging ? "border-app-accent bg-app-sky" : "border-app-line bg-app-tint hover:border-app-accent"
+                }`}
+              >
+                <span className="text-3xl" aria-hidden>
+                  📎
+                </span>
+                <span className="mt-2 text-[15px] font-semibold">
+                  <span className="lg:hidden">Choose from your phone</span>
+                  <span className="hidden lg:inline">Drop files here or click to choose</span>
+                </span>
+                <span className="mt-1 text-[13px] text-app-muted">PDF, JPG, PNG, WEBP or TXT · up to {MAX_FILES} files · 3 MB total</span>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.md,application/pdf,image/jpeg,image/png,image/webp,text/plain"
+                  className="sr-only"
+                  onChange={(e) => {
+                    addFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {fileError && <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{fileError}</p>}
+              {files.length > 0 && (
+                <ul className="mt-3 space-y-2">
+                  {files.map((f, i) => (
+                    <li key={f.name + f.size} className="flex items-center gap-3 rounded-xl border border-app-line px-3 py-2">
+                      <span aria-hidden>{f.mimeType === "application/pdf" ? "📄" : f.mimeType === "text/plain" ? "📝" : "🖼️"}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{f.name}</span>
+                      <span className="text-xs text-app-muted">{prettySize(f.size)}</span>
+                      <button
+                        onClick={() => setFiles(files.filter((_, j) => j !== i))}
+                        className="grid h-8 w-8 place-items-center rounded-full text-app-muted hover:bg-app-tint"
+                        aria-label={`Remove ${f.name}`}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <label className="mt-4 block">
+                <span className="text-sm font-semibold">
+                  Anything to add? <span className="font-normal text-app-muted">(optional)</span>
+                </span>
+                <input
+                  value={ideas}
+                  onChange={(e) => setIdeas(e.target.value)}
+                  maxLength={1000}
+                  placeholder="e.g. Price the e-book at ₹199"
+                  className="mt-1.5 min-h-11 w-full rounded-full border border-app-line bg-app-tint px-4 text-[15px] outline-none focus:border-app-accent focus:bg-app-surface"
+                />
+              </label>
+              <p className="mt-3 text-xs text-app-muted">🔒 Files are only read to build your store. We don&apos;t save them.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Actions: pinned on mobile, inline on desktop */}
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-app-line bg-app-surface/95 backdrop-blur lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:backdrop-blur-none">
+          <div className="mx-auto flex max-w-md items-center gap-2 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] lg:max-w-none lg:justify-end lg:p-0">
+            {choice !== "ai" && (
+              <button
+                onClick={() => {
+                  setChoice("ai");
+                  props.onBuild("ai");
+                }}
+                className="min-h-12 shrink-0 rounded-full px-4 text-sm font-medium text-app-muted hover:text-app-ink"
+              >
+                Skip
+              </button>
+            )}
+            <button
+              onClick={() => props.onBuild()}
+              disabled={!ready}
+              className="min-h-12 flex-1 rounded-full bg-app-accent px-6 text-[16px] font-semibold text-white shadow-[0_8px_24px_rgba(0,89,255,0.35)] transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none lg:min-h-14 lg:flex-none lg:px-10"
+            >
+              Build my store ✨
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 /* ---------------- Generating screen ---------------- */
 
-function GeneratingScreen({ handle }: { handle: string }) {
+function GeneratingScreen({ handle, files = 0, ideas = false }: { handle: string; files?: number; ideas?: boolean }) {
   const steps = [
     ...(handle ? [`Reading @${handle.replace(/^@/, "")}'s profile`] : []),
+    ...(files ? [`Reading your ${files === 1 ? "file" : `${files} files`}`] : []),
+    ...(ideas ? ["Shaping your product ideas"] : []),
     "Spotting what your audience trusts you for",
     "Picking products and pricing them for India",
     "Writing your bio and product pages",

@@ -1,7 +1,7 @@
 import { lookupInstagram, igSummary, normalizeHandle, type IgResult } from "./instagram";
 import { generateJson, LlmError } from "./llm";
 import { SYSTEM_PROMPT, storefrontQuality, storefrontUserPrompt, toStorefront } from "./prompts";
-import { LlmStorefront, type CreatorContext, type Language, type Storefront } from "./schema";
+import { LlmStorefront, type Attachment, type CreatorContext, type Language, type Storefront } from "./schema";
 
 export type IgStatus = IgResult["status"] | "private" | "skipped";
 
@@ -11,7 +11,7 @@ export type GenerateOutcome =
       storefront: Storefront;
       ctx: CreatorContext;
       assumptions: string[];
-      source: { igStatus: IgStatus; usedInstagram: boolean; captions: number };
+      source: { igStatus: IgStatus; usedInstagram: boolean; captions: number; usedIdeas: boolean; files: number };
       meta: { model: string; attempts: number; ms: number };
     }
   /** We need a description before we can do anything useful. */
@@ -52,12 +52,25 @@ export async function generateStorefront(input: {
   handle?: string;
   description?: string;
   language: Language;
+  /** Products the creator already has in mind, in their words. */
+  ideas?: string;
+  /** Existing material (e-book, outline, rate card…), read once by the model. */
+  files?: Attachment[];
 }): Promise<GenerateOutcome> {
   const t0 = Date.now();
   const description = input.description?.trim() || undefined;
   const rawHandle = input.handle?.trim() || undefined;
+  const ideas = input.ideas?.trim() || undefined;
+  const files = input.files ?? [];
+  // Ideas or files are enough to build from, even without a readable profile or description.
+  const hasOwnMaterial = !!ideas || files.length > 0;
 
-  let ctx: CreatorContext = { description, language: input.language, followers: followersFromText(description) };
+  let ctx: CreatorContext = {
+    description,
+    ideas,
+    language: input.language,
+    followers: followersFromText(description) ?? followersFromText(ideas),
+  };
   let igStatus: IgStatus = "skipped";
   let avatarUrl: string | undefined;
   let fullName: string | undefined;
@@ -74,18 +87,18 @@ export async function generateStorefront(input: {
       avatarUrl = ig.avatarUrl;
       fullName = ig.fullName;
       captions = ig.captions.length;
-      if (thin && !description) {
+      if (thin && !description && !hasOwnMaterial) {
         return { kind: "needs_description", igStatus, handle: ig.handle, message: IG_MESSAGES.private };
       }
     } else {
       if (ig.status === "invalid") ctx.handle = undefined;
-      if (!description) {
+      if (!description && !hasOwnMaterial) {
         return { kind: "needs_description", igStatus, handle: ig.handle, message: IG_MESSAGES[ig.status] };
       }
     }
   }
 
-  if (!ctx.igSummary && (!description || looksEmpty(description))) {
+  if (!ctx.igSummary && !hasOwnMaterial && (!description || looksEmpty(description))) {
     return {
       kind: "need_more_info",
       question: "Tell us what you teach or create, and who it's for. For example: \"I teach spoken English to college students\".",
@@ -96,8 +109,9 @@ export async function generateStorefront(input: {
     const res = await generateJson({
       schema: LlmStorefront,
       system: SYSTEM_PROMPT,
-      user: storefrontUserPrompt(ctx),
+      user: storefrontUserPrompt(ctx, files.map((f) => f.name)),
       qualityCheck: storefrontQuality,
+      files: files.map((f) => ({ mimeType: f.mimeType, data: f.data })),
     });
     const out = res.data;
     if (out.status === "need_more_info" || out.products.length < 2) {
@@ -106,12 +120,14 @@ export async function generateStorefront(input: {
         question: out.clarifyingQuestion || "Could you tell us a bit more about what you create and who follows you?",
       };
     }
+    // Keep a compact summary of the files (not the files) so later rewrites stay grounded.
+    if (files.length && out.materialSummary.trim()) ctx = { ...ctx, materialSummary: out.materialSummary.trim().slice(0, 1500) };
     return {
       kind: "ok",
       storefront: toStorefront(out, { ...ctx, avatarUrl, fullName }),
       ctx,
       assumptions: out.assumptions,
-      source: { igStatus, usedInstagram: !!ctx.igSummary, captions },
+      source: { igStatus, usedInstagram: !!ctx.igSummary, captions, usedIdeas: !!ideas, files: files.length },
       meta: { model: res.model, attempts: res.attempts, ms: Date.now() - t0 },
     };
   } catch (e) {
