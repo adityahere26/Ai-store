@@ -83,6 +83,10 @@ export function creatorBlock(ctx: CreatorContext): string {
   if (ctx.description) parts.push(`CREATOR'S OWN DESCRIPTION:\n"""${ctx.description}"""`);
   if (ctx.ideas) parts.push(`PRODUCTS THE CREATOR ALREADY HAS IN MIND (build these first, origin "creator"):\n"""${ctx.ideas}"""`);
   if (ctx.materialSummary) parts.push(`FACTS FROM THE CREATOR'S UPLOADED MATERIAL:\n${ctx.materialSummary}`);
+  if (ctx.newPage)
+    parts.push(
+      "STAGE: The creator's Instagram page is NEW (just starting, little or no audience yet). Favour a very low-risk first product (₹49-₹299) that a stranger would try, keep prices at the small-audience end of each band, and make at least one product something they can deliver while still building an audience (e.g. a live workshop or 1:1 call, not a big pre-recorded course).",
+    );
   return parts.join("\n\n");
 }
 

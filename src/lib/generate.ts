@@ -56,6 +56,8 @@ export async function generateStorefront(input: {
   ideas?: string;
   /** Existing material (e-book, outline, rate card…), read once by the model. */
   files?: Attachment[];
+  /** Creator says their Instagram page is new. */
+  newPage?: boolean;
 }): Promise<GenerateOutcome> {
   const t0 = Date.now();
   const description = input.description?.trim() || undefined;
@@ -68,6 +70,7 @@ export async function generateStorefront(input: {
   let ctx: CreatorContext = {
     description,
     ideas,
+    newPage: input.newPage || undefined,
     language: input.language,
     followers: followersFromText(description) ?? followersFromText(ideas),
   };

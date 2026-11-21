@@ -103,6 +103,8 @@ export const CreatorContext = z.object({
   ideas: z.string().max(1000).optional(),
   /** Summary of uploaded files (the files themselves are never stored). */
   materialSummary: z.string().max(1500).optional(),
+  /** Creator said their Instagram page is new / just starting. */
+  newPage: z.boolean().optional(),
 });
 export type CreatorContext = z.infer<typeof CreatorContext>;
 

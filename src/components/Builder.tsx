@@ -31,6 +31,8 @@ interface Draft {
   publish?: { slug: string; editToken: string; publishedAt: number };
   /** Loaded on demand, kept with the draft so reopening is instant and free. */
   inspiration?: Inspiration;
+  /** Creator said their Instagram page is new: show inspiration up front. */
+  newPage?: boolean;
   dirty?: boolean;
 }
 
@@ -143,20 +145,25 @@ export default function Builder() {
   const [ideas, setIdeas] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
 
+  // "Is this a new Instagram page?" (null until we can guess or they answer)
+  const [newPage, setNewPage] = useState<boolean | null>(null);
+  // Live Instagram preview, lifted here so the question can be pre-filled from real follower counts.
+  const ig = useInstagramPreview(handle);
+
   // Inspiration panel
   const [inspOpen, setInspOpen] = useState(false);
   const [inspBusy, setInspBusy] = useState(false);
   const [inspError, setInspError] = useState<string | null>(null);
 
-  async function loadInspiration(force = false) {
-    if (!draft || inspBusy) return;
+  async function loadInspiration(force = false, base: Draft | null = draft) {
+    if (!base || inspBusy) return;
     setInspOpen(true);
-    if (draft.inspiration && !force) return;
+    if (base.inspiration && !force) return;
     setInspBusy(true);
     setInspError(null);
     const r = await api<{ kind: string; inspiration: Inspiration; message?: string }>("/api/inspiration", {
-      ctx: draft.ctx,
-      storefront: draft.storefront,
+      ctx: base.ctx,
+      storefront: base.storefront,
     });
     setInspBusy(false);
     if (!r.ok || r.data.kind !== "ok" || !r.data.inspiration) {
@@ -211,6 +218,11 @@ export default function Builder() {
       setQuestion("Add your Instagram handle, or tell us in a line what you create.");
       return;
     }
+    // Pre-fill from what we know; the creator can change it.
+    if (newPage === null) {
+      if (ig.status === "found") setNewPage((ig.profile.followers ?? 0) < 1000);
+      else if (!handle.trim() || ig.status === "not_found") setNewPage(true);
+    }
     setStage("clarify");
     window.scrollTo({ top: 0 });
   }
@@ -237,7 +249,7 @@ export default function Builder() {
       source?: Draft["source"];
       message?: string;
       question?: string;
-    }>("/api/generate", { handle: handle.trim() || undefined, description: description.trim() || undefined, language, ...extra });
+    }>("/api/generate", { handle: handle.trim() || undefined, description: description.trim() || undefined, language, newPage: newPage ?? undefined, ...extra });
 
     const d = r.data;
     if (r.ok && d?.kind === "ok" && d.storefront && d.ctx) {
@@ -246,11 +258,14 @@ export default function Builder() {
         ctx: d.ctx,
         assumptions: d.assumptions ?? [],
         source: d.source ?? { usedInstagram: false, captions: 0, igStatus: "skipped" },
+        newPage: newPage ?? undefined,
       };
       setDraft(next);
       setHistory([]);
       setStage("edit");
       window.scrollTo({ top: 0 });
+      // New pages get inspiration straight away: creators to learn from + what to post.
+      if (newPage) loadInspiration(false, next);
       return;
     }
     setStage("input");
@@ -350,7 +365,7 @@ export default function Builder() {
 
       {stage === "input" && (
         <InputScreen
-          {...{ handle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved }}
+          {...{ handle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved, ig }}
           setHandle={(v) => {
             setHandle(v);
             setHandleMsg(null);
@@ -371,7 +386,9 @@ export default function Builder() {
       {stage === "clarify" && (
         <ClarifyScreen
           who={handle.trim() ? `@${handle.trim().replace(/^@+/, "")}` : `“${description.trim().slice(0, 60)}${description.trim().length > 60 ? "…" : ""}”`}
-          {...{ choice, setChoice, ideas, setIdeas, files, setFiles }}
+          {...{ choice, setChoice, ideas, setIdeas, files, setFiles, newPage, setNewPage }}
+          handle={handle.trim().replace(/^@+/, "")}
+          followers={ig.status === "found" ? ig.profile.followers : undefined}
           onBack={() => setStage("input")}
           onBuild={generate}
         />
@@ -797,13 +814,14 @@ function InputScreen(props: {
   question: string | null;
   descRef: React.RefObject<HTMLTextAreaElement | null>;
   saved: Draft | null;
+  ig: IgPreview;
   onSubmit: () => void;
   onResume: () => void;
   onDiscard: () => void;
 }) {
   const { handle, setHandle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved } = props;
   const canSubmit = handle.trim() || description.trim();
-  const ig = useInstagramPreview(handle);
+  const ig = props.ig;
   return (
     <main className="min-h-dvh overflow-x-clip bg-app-tint">
       {/* Dark hero band. On mobile the form card hangs over its bottom edge; on desktop it sits beside the headline. */}
@@ -1044,6 +1062,10 @@ function readAsBase64(f: File): Promise<string> {
 
 function ClarifyScreen(props: {
   who: string;
+  handle: string;
+  followers?: number;
+  newPage: boolean | null;
+  setNewPage: (v: boolean) => void;
   choice: Choice;
   setChoice: (c: Choice) => void;
   ideas: string;
@@ -1082,7 +1104,8 @@ function ClarifyScreen(props: {
     setFiles(next);
   };
 
-  const ready = choice === "ai" || (choice === "ideas" && ideas.trim().length > 0) || (choice === "upload" && files.length > 0);
+  const ready =
+    props.newPage !== null && (choice === "ai" || (choice === "ideas" && ideas.trim().length > 0) || (choice === "upload" && files.length > 0));
 
   return (
     <main className="min-h-dvh bg-app-tint">
@@ -1095,13 +1118,53 @@ function ClarifyScreen(props: {
             Building for <span className="truncate font-semibold text-white">{props.who}</span>
           </p>
           <h1 className="tight mt-4 text-[34px] leading-[1.05] font-medium lg:text-[56px]">
-            Before we build, <span className="font-serif-i text-[38px] text-[#cfe6ff] lg:text-[64px]">one quick question.</span>
+            Before we build, <span className="font-serif-i text-[38px] text-[#cfe6ff] lg:text-[64px]">two quick questions.</span>
           </h1>
-          <p className="mt-3 text-[16px] text-white/70 lg:text-[19px]">Do you already have something you sell, or want to sell?</p>
+          <p className="mt-3 text-[16px] text-white/70 lg:text-[19px]">Your answers shape your products, prices and tips.</p>
         </div>
       </section>
 
       <section className="mx-auto -mt-10 max-w-md px-4 pb-32 lg:-mt-14 lg:max-w-5xl lg:px-8 lg:pb-16">
+        {/* Q1: new page? */}
+        <div className="rounded-[22px] bg-app-surface p-5 shadow-[0_8px_30px_rgba(22,16,30,0.08)] lg:p-6">
+          <p className="text-[12px] font-semibold tracking-[0.14em] text-app-muted uppercase">Question 1</p>
+          <h2 className="mt-1 text-[18px] font-semibold tracking-tight lg:text-[21px]">
+            {props.handle ? (
+              <>
+                Is <span className="text-app-accent">@{props.handle}</span> a new Instagram page?
+              </>
+            ) : (
+              "Are you just starting on Instagram?"
+            )}
+          </h2>
+          {props.followers !== undefined && (
+            <p className="mt-0.5 text-[13px] text-app-muted">We can see {compactCount(props.followers)} followers on this account.</p>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Is this a new Instagram page?">
+            {[
+              { v: true, t: "🌱 Yes, just starting", d: "Show me top creators and what to post" },
+              { v: false, t: "📈 No, I already post", d: "I have an audience already" },
+            ].map((o) => {
+              const on = props.newPage === o.v;
+              return (
+                <button
+                  key={String(o.v)}
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => props.setNewPage(o.v)}
+                  className={`rounded-2xl p-3 text-left transition lg:p-4 ${on ? "bg-app-ink text-white" : "bg-app-tint text-app-ink hover:bg-[#ecebf7]"}`}
+                >
+                  <span className="block text-[15px] font-semibold">{o.t}</span>
+                  <span className={`mt-0.5 block text-[12.5px] leading-snug ${on ? "text-white/70" : "text-app-muted"}`}>{o.d}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Q2: anything in mind? */}
+        <p className="mt-6 text-[12px] font-semibold tracking-[0.14em] text-app-muted uppercase">Question 2</p>
+        <h2 className="mt-1 mb-3 text-[18px] font-semibold tracking-tight lg:text-[21px]">Do you already have something you sell, or want to sell?</h2>
         <div className="grid gap-3 lg:grid-cols-3 lg:gap-5" role="radiogroup" aria-label="What should we build from?">
           {CHOICES.map((c) => {
             const on = choice === c.id;
@@ -1532,7 +1595,7 @@ const POST_FORMAT_LABEL: Record<string, string> = { reel: "🎬 Reel", carousel:
 
 /** New creators (under 10K or no Instagram) get a prominent card; others a quiet link. */
 function InspirationEntry({ draft, onOpen }: { draft: Draft; onOpen: () => void }) {
-  const isNew = !draft.storefront.followers || draft.storefront.followers < 10_000;
+  const isNew = draft.newPage ?? (!draft.storefront.followers || draft.storefront.followers < 10_000);
   if (!isNew)
     return (
       <button onClick={onOpen} className="mt-3 flex min-h-11 w-full items-center justify-between rounded-2xl border border-app-line px-4 text-left text-[14px] font-semibold hover:bg-app-tint">

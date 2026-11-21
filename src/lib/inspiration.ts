@@ -112,8 +112,9 @@ export async function buildInspiration(ctx: CreatorContext, s: Storefront): Prom
   const first = await verifyCreators(res.data.creators, seen);
   let creators = first.kept;
 
-  // One correction round if too few handles were real: tell the model exactly what failed.
-  if (creators.filter((c) => c.check === "verified").length < 3) {
+  // Up to two correction rounds if too few handles were real: tell the model exactly what failed.
+  const dropped = [...first.dropped];
+  for (let round = 0; round < 2 && creators.filter((c) => c.check === "verified").length < 3; round++) {
     try {
       const retry = await generateJson({
         schema: LlmInspiration.pick({ creators: true }),
@@ -121,15 +122,17 @@ export async function buildInspiration(ctx: CreatorContext, s: Storefront): Prom
         user: `${promptFor(ctx, s)}
 
 Only return "creators". We checked your earlier suggestions on Instagram.
-These handles DO NOT exist (don't repeat them or near-spellings): ${first.dropped.map((h) => "@" + h).join(", ") || "none"}.
+These handles DO NOT exist (don't repeat them or near-spellings): ${dropped.map((h) => "@" + h).join(", ") || "none"}.
 Already confirmed (don't repeat): ${creators.map((c) => "@" + c.handle).join(", ") || "none"}.
-Suggest 6 to 10 different real Indian creators in "${s.niche}" with exact handles.`,
+Suggest 6 to 10 different real Indian creators in "${s.niche}" (or the broader ${s.niche.split(/\s|&/)[0]} space) with exact handles.`,
         temperature: 0.7,
-        budgetMs: 35_000,
+        budgetMs: 30_000,
       });
-      creators = [...creators, ...(await verifyCreators(retry.data.creators, seen)).kept];
+      const more = await verifyCreators(retry.data.creators, seen);
+      creators = [...creators, ...more.kept];
+      dropped.push(...more.dropped);
     } catch {
-      /* keep what we have */
+      break; // keep what we have
     }
   }
 
