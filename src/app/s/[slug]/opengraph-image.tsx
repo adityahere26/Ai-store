@@ -27,7 +27,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   return new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: c.bg, color: c.ink, padding: 72, fontFamily: "sans-serif" }}>
-        <div style={{ display: "flex", fontSize: 30, color: c.muted }}>{s?.handle ? `@${s.handle}` : "Storefront"}</div>
+        <div style={{ display: "flex", fontSize: 30, color: c.muted }}>{s?.handle ? `@${s.handle}` : "Minute Store"}</div>
         <div style={{ display: "flex", fontSize: 76, fontWeight: 700, marginTop: 12, lineHeight: 1.05 }}>{name}</div>
         {tagline && <div style={{ display: "flex", fontSize: 38, marginTop: 20, color: c.muted }}>{tagline}</div>}
         <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", gap: 10 }}>

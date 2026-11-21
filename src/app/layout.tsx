@@ -18,7 +18,7 @@ const serif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Storefront AI · Your store, ready in a minute",
+  title: "Minute Store · Turn your Instagram into a store",
   description:
     "Turn your Instagram handle or a one-line description into a ready-to-share store with products, INR pricing and copy.",
 };

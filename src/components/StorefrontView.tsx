@@ -229,9 +229,9 @@ export default function StorefrontView({ storefront: s, mode, onEditBio, onEditP
               <footer className="mt-12 text-center text-[13px] text-sf-muted @3xl:text-left">
                 Made with{" "}
                 <Link href="/" className="font-semibold text-sf-ink underline-offset-2 hover:underline">
-                  Storefront AI
+                  Minute Store
                 </Link>{" "}
-                · Build your own store in a minute
+                · Build yours free
               </footer>
             )}
           </section>

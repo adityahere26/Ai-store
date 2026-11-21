@@ -485,7 +485,7 @@ export default function Builder() {
             <div className="mx-auto flex max-w-md items-center justify-between px-4 py-2.5 lg:max-w-7xl lg:px-8 lg:py-3">
               <div className="flex items-center gap-6">
                 <p className="hidden text-[17px] font-semibold tracking-tight lg:block">
-                  <span className="text-app-accent-2">✦</span> Storefront AI
+                  <span className="text-app-accent-2">✦</span> Minute Store
                 </p>
                 <button onClick={startOver} className="min-h-10 text-sm font-medium text-white/70 hover:text-white">
                   ← Start over
@@ -919,7 +919,7 @@ function InputScreen(props: {
         />
         <nav className="relative mx-auto flex max-w-md items-center justify-between px-5 pt-5 lg:max-w-6xl lg:px-8 lg:pt-7">
           <p className="text-[17px] font-semibold tracking-tight lg:text-[20px]">
-            <span className="text-app-accent-2">✦</span> Storefront AI
+            <span className="text-app-accent-2">✦</span> Minute Store
           </p>
           <div className="flex items-center gap-6">
             <span className="hidden text-sm text-white/60 lg:inline">For creators, coaches &amp; educators</span>

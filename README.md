@@ -1,4 +1,4 @@
-# Storefront AI
+# Minute Store
 
 Turn an Instagram handle or a one-line description into a ready-to-share creator store: an AI-written bio, 2–4 product ideas with India-appropriate INR pricing (and the reasoning behind each price), product descriptions, and a mobile-first public page.
 
