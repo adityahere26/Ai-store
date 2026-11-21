@@ -119,3 +119,60 @@ export const Attachment = z.object({
   data: z.string().max(4_200_000), // base64
 });
 export type Attachment = z.infer<typeof Attachment>;
+
+/* ---------- Inspiration for new creators ---------- */
+
+export const POST_FORMATS = ["reel", "carousel", "story", "live"] as const;
+
+export const LlmInspiration = z.object({
+  creators: z
+    .array(
+      z.object({
+        handle: z.string().min(1).max(40),
+        name: z.string().max(80),
+        why: z.string().min(10).max(160),
+      }),
+    )
+    .max(12),
+  patterns: z
+    .array(
+      z.object({
+        title: z.string().min(3).max(60),
+        format: z.enum(POST_FORMATS),
+        example: z.string().min(10).max(200),
+      }),
+    )
+    .min(2)
+    .max(4),
+  ideas: z
+    .array(
+      z.object({
+        format: z.enum(POST_FORMATS),
+        hook: z.string().min(5).max(140),
+        outline: z.array(z.string().min(3).max(140)).min(2).max(4),
+        productTitle: z.string().max(120),
+      }),
+    )
+    .min(4)
+    .max(6),
+});
+export type LlmInspiration = z.infer<typeof LlmInspiration>;
+
+export interface InspirationCreator {
+  handle: string;
+  name: string;
+  why: string;
+  /** "verified": profile exists (checked live). "unchecked": Instagram unreachable, shown with a label. */
+  check: "verified" | "unchecked";
+  followers?: number;
+  posts?: number;
+  avatarUrl?: string;
+}
+
+export interface Inspiration {
+  niche: string;
+  creators: InspirationCreator[];
+  patterns: LlmInspiration["patterns"];
+  ideas: (Omit<LlmInspiration["ideas"][number], "productTitle"> & { productTitle: string | null })[];
+  createdAt: number;
+}

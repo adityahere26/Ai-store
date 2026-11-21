@@ -12,7 +12,7 @@ import {
 } from "./schema";
 import type { z } from "zod";
 
-const LANGUAGE_RULE: Record<Language, string> = {
+export const LANGUAGE_RULE: Record<Language, string> = {
   english:
     "Write all creator-facing copy in simple, warm Indian English. Short sentences. No jargon.",
   hinglish:
@@ -21,7 +21,7 @@ const LANGUAGE_RULE: Record<Language, string> = {
     "Write all copy in simple, conversational Hindi in Devanagari script. Common English words (course, template, live, 1:1) may stay in English.",
 };
 
-const BANNED = [
+export const BANNED = [
   "unlock",
   "journey",
   "elevate",

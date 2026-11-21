@@ -12,6 +12,8 @@ import {
   FORMAT_LABEL,
   THEMES,
   type CreatorContext,
+  type Inspiration,
+  type InspirationCreator,
   type Format,
   type Language,
   type Product,
@@ -27,6 +29,8 @@ interface Draft {
   assumptions: string[];
   source: { usedInstagram: boolean; captions: number; igStatus: string; usedIdeas?: boolean; files?: number };
   publish?: { slug: string; editToken: string; publishedAt: number };
+  /** Loaded on demand, kept with the draft so reopening is instant and free. */
+  inspiration?: Inspiration;
   dirty?: boolean;
 }
 
@@ -138,6 +142,29 @@ export default function Builder() {
   const [choice, setChoice] = useState<Choice>("ai");
   const [ideas, setIdeas] = useState("");
   const [files, setFiles] = useState<PickedFile[]>([]);
+
+  // Inspiration panel
+  const [inspOpen, setInspOpen] = useState(false);
+  const [inspBusy, setInspBusy] = useState(false);
+  const [inspError, setInspError] = useState<string | null>(null);
+
+  async function loadInspiration(force = false) {
+    if (!draft || inspBusy) return;
+    setInspOpen(true);
+    if (draft.inspiration && !force) return;
+    setInspBusy(true);
+    setInspError(null);
+    const r = await api<{ kind: string; inspiration: Inspiration; message?: string }>("/api/inspiration", {
+      ctx: draft.ctx,
+      storefront: draft.storefront,
+    });
+    setInspBusy(false);
+    if (!r.ok || r.data.kind !== "ok" || !r.data.inspiration) {
+      setInspError(r.data.message ?? "Couldn't load inspiration right now. Try again in a moment.");
+      return;
+    }
+    setDraft((d) => (d ? { ...d, inspiration: r.data.inspiration } : d));
+  }
 
   useEffect(() => {
     const d = loadDraft();
@@ -259,7 +286,8 @@ export default function Builder() {
       updateStore((s) => ({ ...s, products: s.products.map((p, i) => (i === target.index ? d.product! : p)) }), { undoable: true });
     if (target.kind === "all" && d.storefront) {
       setHistory((h) => [...h.slice(-9), draft.storefront]);
-      setDraft((cur) => (cur ? { ...cur, storefront: d.storefront!, assumptions: d.assumptions ?? [], dirty: true } : cur));
+      // New products mean old post ideas would point at products that no longer exist.
+      setDraft((cur) => (cur ? { ...cur, storefront: d.storefront!, assumptions: d.assumptions ?? [], inspiration: undefined, dirty: true } : cur));
     }
     setToast({ msg: "Rewritten. Not a fan? Tap Undo.", tone: "info" });
     return true;
@@ -415,6 +443,8 @@ export default function Builder() {
                     </ul>
                   </div>
                 )}
+
+                <InspirationEntry draft={draft} onOpen={() => loadInspiration()} />
 
                 <div className="mt-4 flex items-center justify-between gap-3 lg:flex-col lg:items-stretch lg:gap-4">
                   <div>
@@ -590,8 +620,12 @@ export default function Builder() {
         </div>
       )}
 
+      {inspOpen && draft && (stage === "edit" || stage === "published") && (
+        <InspirationSheet draft={draft} busy={inspBusy} error={inspError} onRetry={() => loadInspiration(true)} onClose={() => setInspOpen(false)} />
+      )}
+
       {stage === "published" && draft?.publish && (
-        <PublishedScreen draft={draft} onEdit={() => setStage("edit")} onNew={startOver} />
+        <PublishedScreen draft={draft} onEdit={() => setStage("edit")} onNew={startOver} onInspire={() => loadInspiration()} />
       )}
     </div>
   );
@@ -1492,9 +1526,217 @@ function ProductSheet({
   );
 }
 
+/* ---------------- Inspiration: creators, patterns, post ideas ---------------- */
+
+const POST_FORMAT_LABEL: Record<string, string> = { reel: "🎬 Reel", carousel: "🖼 Carousel", story: "⏱ Story", live: "🔴 Live" };
+
+/** New creators (under 10K or no Instagram) get a prominent card; others a quiet link. */
+function InspirationEntry({ draft, onOpen }: { draft: Draft; onOpen: () => void }) {
+  const isNew = !draft.storefront.followers || draft.storefront.followers < 10_000;
+  if (!isNew)
+    return (
+      <button onClick={onOpen} className="mt-3 flex min-h-11 w-full items-center justify-between rounded-2xl border border-app-line px-4 text-left text-[14px] font-semibold hover:bg-app-tint">
+        📈 Content ideas that sell your store <span aria-hidden>→</span>
+      </button>
+    );
+  return (
+    <button
+      onClick={onOpen}
+      className="mt-3 block w-full rounded-2xl bg-gradient-to-br from-[#e5fff1] to-[#dce8ff] px-4 py-3.5 text-left transition hover:brightness-[0.98]"
+    >
+      <span className="block text-[15px] font-semibold">🌱 Starting out on Instagram?</span>
+      <span className="mt-0.5 block text-[13.5px] leading-snug text-app-ink/75">
+        See top creators in {draft.storefront.niche || "your niche"}, what&apos;s working, and 6 post ideas that sell your store.
+      </span>
+      <span className="mt-2 inline-flex min-h-9 items-center rounded-full bg-app-ink px-4 text-[13px] font-semibold text-white">
+        {draft.inspiration ? "Open your inspiration →" : "Get inspiration →"}
+      </span>
+    </button>
+  );
+}
+
+function CreatorAvatar({ c }: { c: InspirationCreator }) {
+  const [broken, setBroken] = useState(false);
+  if (c.avatarUrl && !broken)
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={c.avatarUrl} alt="" onError={() => setBroken(true)} className="h-12 w-12 shrink-0 rounded-full object-cover" />;
+  return <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-app-ink font-semibold text-white">{(c.name || c.handle)[0]?.toUpperCase()}</div>;
+}
+
+function IdeaCard({ idea }: { idea: Inspiration["ideas"][number] }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <li className="rounded-[18px] border border-app-line p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="rounded-full bg-app-tint px-2.5 py-0.5 text-[12px] font-semibold">{POST_FORMAT_LABEL[idea.format] ?? idea.format}</span>
+        <button
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(`${idea.hook}\n\n${idea.outline.map((o, i) => `${i + 1}. ${o}`).join("\n")}`);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            } catch {}
+          }}
+          className="min-h-8 rounded-full px-3 text-[12.5px] font-semibold text-app-accent hover:bg-app-sky"
+        >
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
+      </div>
+      <p className="mt-2 text-[16px] leading-snug font-semibold">“{idea.hook}”</p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-[14px] leading-snug text-app-ink/80">
+        {idea.outline.map((o, i) => (
+          <li key={i}>{o}</li>
+        ))}
+      </ol>
+      {idea.productTitle && (
+        <p className="mt-3 inline-flex max-w-full items-center gap-1 rounded-full bg-app-mint px-3 py-1 text-[12.5px] font-medium text-[#00714c]">
+          <span aria-hidden>🛍</span> <span className="truncate">Leads to: {idea.productTitle}</span>
+        </p>
+      )}
+    </li>
+  );
+}
+
+function InspirationSheet({
+  draft,
+  busy,
+  error,
+  onRetry,
+  onClose,
+}: {
+  draft: Draft;
+  busy: boolean;
+  error: string | null;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
+  const insp = draft.inspiration;
+  const niche = draft.storefront.niche || "your niche";
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Inspiration"
+      footer={
+        <div className="flex gap-2">
+          {insp && (
+            <button onClick={onRetry} disabled={busy} className="min-h-12 rounded-full border border-app-line px-5 text-sm font-semibold disabled:opacity-50">
+              {busy ? "Refreshing…" : "↻ New ideas"}
+            </button>
+          )}
+          <button onClick={onClose} className="min-h-12 flex-1 rounded-full bg-app-ink font-semibold text-white">
+            Done
+          </button>
+        </div>
+      }
+    >
+      {busy && !insp && (
+        <div aria-live="polite">
+          <p className="text-[15px] font-semibold">Finding creators in {niche}…</p>
+          <p className="mt-1 text-sm text-app-muted">We check every suggested profile on Instagram, so this can take up to a minute.</p>
+          <div className="mt-5 space-y-3" aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full skeleton" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-40 skeleton" />
+                  <div className="h-3 w-56 skeleton" />
+                </div>
+              </div>
+            ))}
+            <div className="h-28 rounded-[18px] skeleton" />
+            <div className="h-28 rounded-[18px] skeleton" />
+          </div>
+        </div>
+      )}
+
+      {error && !busy && (
+        <div className="rounded-2xl bg-app-warn-bg p-4 text-sm text-app-warn-ink">
+          <p>{error}</p>
+          <button onClick={onRetry} className="mt-2 min-h-9 rounded-full bg-app-ink px-4 font-semibold text-white">
+            Try again
+          </button>
+        </div>
+      )}
+
+      {insp && (
+        <div className="space-y-7">
+          <section>
+            <h3 className="tight text-[20px] font-semibold">Creators to learn from</h3>
+            <p className="mt-0.5 text-[12.5px] text-app-muted">✓ Profiles checked on Instagram. Tap to see their most popular Reels.</p>
+            {insp.creators.length === 0 ? (
+              <p className="mt-3 rounded-2xl bg-app-tint p-3 text-sm text-app-muted">
+                We couldn&apos;t confirm creator suggestions for this niche right now. Try “New ideas” in a bit.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2.5">
+                {insp.creators.map((c) => (
+                  <li key={c.handle} className="flex gap-3 rounded-[18px] border border-app-line p-3">
+                    <CreatorAvatar c={c} />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 text-[15px] leading-tight font-semibold">
+                        <span className="truncate">{c.name || `@${c.handle}`}</span>
+                        {c.check === "verified" && (
+                          <span title="Profile checked on Instagram" className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[#0099ff] text-[9px] text-white">
+                            ✓
+                          </span>
+                        )}
+                      </p>
+                      <p className="truncate text-[12.5px] text-app-muted">
+                        @{c.handle}
+                        {c.followers ? ` · ${compactCount(c.followers)} followers` : ""}
+                        {c.check === "unchecked" ? " · couldn't verify right now" : ""}
+                      </p>
+                      <p className="mt-1 text-[13.5px] leading-snug text-app-ink/80">{c.why}</p>
+                      <a
+                        href={`https://www.instagram.com/${c.handle}/reels/`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex min-h-8 items-center rounded-full bg-app-ink px-3 text-[12.5px] font-semibold text-white"
+                      >
+                        See top Reels ↗
+                      </a>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section>
+            <h3 className="tight text-[20px] font-semibold">What&apos;s working in {niche}</h3>
+            <p className="mt-0.5 text-[12.5px] text-app-muted">AI analysis of common formats, not stats from specific posts.</p>
+            <div className="mt-3 grid gap-2.5">
+              {insp.patterns.map((p, i) => (
+                <div key={i} className={`${["bg-app-blush", "bg-app-sky", "bg-app-mint", "bg-app-tint"][i % 4]} rounded-[18px] p-4`}>
+                  <p className="text-[12px] font-semibold text-app-ink/60">{POST_FORMAT_LABEL[p.format] ?? p.format}</p>
+                  <p className="mt-0.5 text-[15.5px] font-semibold">{p.title}</p>
+                  <p className="mt-1 text-[13.5px] leading-snug text-app-ink/80">{p.example}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="tight text-[20px] font-semibold">
+              {insp.ideas.length} post ideas <span className="font-serif-i text-[22px]">that sell your store</span>
+            </h3>
+            <p className="mt-0.5 text-[12.5px] text-app-muted">Each one points people to a product in your store. Copy, film, post.</p>
+            <ul className="mt-3 space-y-2.5">
+              {insp.ideas.map((idea, i) => (
+                <IdeaCard key={i} idea={idea} />
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 /* ---------------- Published screen ---------------- */
 
-function PublishedScreen({ draft, onEdit, onNew }: { draft: Draft; onEdit: () => void; onNew: () => void }) {
+function PublishedScreen({ draft, onEdit, onNew, onInspire }: { draft: Draft; onEdit: () => void; onNew: () => void; onInspire: () => void }) {
   const { slug, editToken } = draft.publish!;
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
@@ -1584,6 +1826,13 @@ function PublishedScreen({ draft, onEdit, onNew }: { draft: Draft; onEdit: () =>
             </div>
           </div>
           <p className="mt-2 text-xs text-app-muted">Your own visits from this device aren&apos;t counted.</p>
+          <button
+            onClick={onInspire}
+            className="mt-4 block w-full rounded-2xl bg-gradient-to-br from-[#e5fff1] to-[#dce8ff] px-4 py-3.5 text-left transition hover:brightness-[0.98]"
+          >
+            <span className="block text-[15px] font-semibold">🌱 What to post to get your first sale</span>
+            <span className="mt-0.5 block text-[13.5px] text-app-ink/75">Creators to learn from + post ideas that link to your products →</span>
+          </button>
         </div>
 
         <div className="mt-8 flex gap-2 lg:hidden">
