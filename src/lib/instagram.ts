@@ -13,8 +13,11 @@ export type IgResult =
       fullName?: string;
       bio?: string;
       followers?: number;
+      following?: number;
+      posts?: number;
       category?: string;
       captions: string[];
+      /** Embedded as a data: URI. Instagram's CDN links are signed and expire in days. */
       avatarUrl?: string;
       isPrivate: boolean;
     }
@@ -57,9 +60,55 @@ function parseCount(s: string): number | undefined {
   return Math.round(n * mult);
 }
 
+/**
+ * Download the profile photo once and inline it. CDN URLs carry an expiry
+ * (`oe=` param, ~4 days), but published stores must outlive that.
+ */
+async function embedAvatar(url?: string): Promise<string | undefined> {
+  if (!url || !/^https:\/\/[^/]*(cdninstagram\.com|fbcdn\.net)\//.test(url)) return undefined;
+  try {
+    const res = await fetchWithTimeout(url, { headers: { "User-Agent": UA } }, 3000);
+    const type = res.headers.get("content-type") ?? "";
+    if (!res.ok || !type.startsWith("image/")) return undefined;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > 150_000) return undefined;
+    return `data:${type.split(";")[0]};base64,${buf.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Read <meta> tags regardless of attribute order. */
+function metaTags(html: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    const key = tag.match(/\b(?:property|name)="([^"]+)"/i)?.[1];
+    const content = tag.match(/\bcontent="([^"]*)"/i)?.[1];
+    if (key && content !== undefined && !(key in out)) out[key] = decodeEntities(content);
+  }
+  return out;
+}
+
+// Short-lived cache: the live profile preview and the generation step look up the
+// same handle seconds apart, and we want to be gentle with Instagram.
+const cache = new Map<string, { at: number; result: IgResult }>();
+const TTL = 10 * 60_000;
+
 export async function lookupInstagram(raw: string): Promise<IgResult> {
   const handle = normalizeHandle(raw);
   if (!isValidHandle(handle)) return { status: "invalid", handle };
+  const hit = cache.get(handle);
+  if (hit && Date.now() - hit.at < TTL) return hit.result;
+  const result = await lookupUncached(handle);
+  // Don't cache transient failures; do cache definite answers.
+  if (result.status !== "unavailable") {
+    if (cache.size > 500) cache.delete(cache.keys().next().value!);
+    cache.set(handle, { at: Date.now(), result });
+  }
+  return result;
+}
+
+async function lookupUncached(handle: string): Promise<IgResult> {
 
   // 1) Public web JSON endpoint (richest: bio, followers, captions).
   try {
@@ -90,7 +139,9 @@ export async function lookupInstagram(raw: string): Promise<IgResult> {
           followers: u.edge_followed_by?.count,
           category: u.category_name || undefined,
           captions,
-          avatarUrl: u.profile_pic_url_hd || u.profile_pic_url || undefined,
+          following: u.edge_follow?.count,
+          posts: u.edge_owner_to_timeline_media?.count,
+          avatarUrl: await embedAvatar(u.profile_pic_url_hd || u.profile_pic_url),
           isPrivate: !!u.is_private,
         };
       }
@@ -109,24 +160,29 @@ export async function lookupInstagram(raw: string): Promise<IgResult> {
     if (res.status === 404) return { status: "not_found", handle };
     if (res.ok) {
       const html = await res.text();
-      const rawDesc = html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]*)"/i)?.[1];
-      const rawTitle = html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]*)"/i)?.[1];
-      const desc = rawDesc ? decodeEntities(rawDesc) : undefined;
-      const title = rawTitle ? decodeEntities(rawTitle) : undefined;
+      const meta = metaTags(html);
+      // e.g. 'name=description': '12K Followers, 300 Following, 450 Posts - Priya (@priya) on Instagram: "bio…"'
+      const desc = meta["description"] ?? meta["og:description"];
       // A missing profile renders Instagram's error shell and no profile meta tags.
-      if (!desc && /PolarisErrorRoot/.test(html)) return { status: "not_found", handle };
-      if (desc && /Followers/i.test(desc)) {
-        // e.g. "12K Followers, 300 Following, 450 Posts - See Instagram photos and videos from Priya (@priya)"
-        const followers = desc.match(/([\d.,]+\s*[KkMm]?)\s+Followers/)?.[1];
-        const fullName = title?.split("(@")[0]?.trim();
-        const bio = desc.split(/:\s*"/)[1]?.replace(/"\s*$/, "");
+      if (!/Followers/i.test(desc ?? "")) {
+        if (/PolarisErrorRoot/.test(html)) return { status: "not_found", handle };
+      } else {
+        const count = (label: string) => {
+          const m = desc!.match(new RegExp(`([\\d.,]+\\s*[KkMm]?)\\s+${label}`));
+          return m ? parseCount(m[1]) : undefined;
+        };
+        const fullName = meta["og:title"]?.split("(@")[0]?.trim();
+        const bio = desc!.match(/on Instagram:\s*"([\s\S]*)"\s*$/)?.[1]?.trim();
         return {
           status: "found",
           handle,
           fullName: fullName || undefined,
           bio: bio || undefined,
-          followers: followers ? parseCount(followers) : undefined,
+          followers: count("Followers"),
+          following: count("Following"),
+          posts: count("Posts"),
           captions: [],
+          avatarUrl: await embedAvatar(meta["og:image"]),
           isPrivate: /This account is private/i.test(html),
         };
       }
@@ -154,6 +210,7 @@ export function igSummary(r: Extract<IgResult, { status: "found" }>): string {
     r.fullName && `Name: ${r.fullName}`,
     r.category && `Category: ${r.category}`,
     r.followers !== undefined && `Followers: ${r.followers.toLocaleString("en-IN")}`,
+    r.posts !== undefined && `Posts: ${r.posts.toLocaleString("en-IN")}`,
     r.bio && `Bio: ${r.bio}`,
     r.isPrivate && `(Account is private: no posts visible)`,
     r.captions.length > 0 && `Recent post captions:\n${r.captions.map((c) => `- ${c.replace(/\s+/g, " ")}`).join("\n")}`,

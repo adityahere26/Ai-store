@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import StorefrontView, { safeTheme } from "./StorefrontView";
+import StorefrontView, { compactCount, safeTheme } from "./StorefrontView";
 import Sheet from "./Sheet";
 import { formatInr, priceBand } from "@/lib/pricing";
 import {
@@ -284,7 +284,11 @@ export default function Builder() {
 
       {stage === "input" && (
         <InputScreen
-          {...{ handle, setHandle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved }}
+          {...{ handle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved }}
+          setHandle={(v) => {
+            setHandle(v);
+            setHandleMsg(null);
+          }}
           onSubmit={generate}
           onResume={() => {
             if (!saved) return;
@@ -576,6 +580,123 @@ export default function Builder() {
   }
 }
 
+/* ---------------- Instagram profile preview ---------------- */
+
+interface IgProfile {
+  handle: string;
+  fullName?: string;
+  bio?: string;
+  followers?: number;
+  following?: number;
+  posts?: number;
+  avatarUrl?: string;
+  isPrivate: boolean;
+}
+type IgPreview =
+  | { status: "idle" }
+  | { status: "loading"; handle: string }
+  | { status: "found"; profile: IgProfile }
+  | { status: "not_found" | "invalid" | "unavailable"; handle: string };
+
+const HANDLE_OK = /^(?!.*\.\.)(?!\.)[a-z0-9._]{1,30}(?<!\.)$/;
+
+/** Debounced lookup while the creator types their handle ("Is this you?"). */
+function useInstagramPreview(rawHandle: string): IgPreview {
+  const [state, setState] = useState<IgPreview>({ status: "idle" });
+  useEffect(() => {
+    const h = rawHandle.trim().toLowerCase().replace(/^@+/, "");
+    if (!h) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when the field is cleared
+      setState({ status: "idle" });
+      return;
+    }
+    if (!HANDLE_OK.test(h)) {
+      setState({ status: "invalid", handle: h });
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = setTimeout(async () => {
+      setState({ status: "loading", handle: h });
+      try {
+        const res = await fetch(`/api/instagram?handle=${encodeURIComponent(h)}`, { signal: ctrl.signal });
+        const d = await res.json();
+        setState(d.status === "found" ? { status: "found", profile: d.profile } : { status: d.status ?? "unavailable", handle: h });
+      } catch {
+        if (!ctrl.signal.aborted) setState({ status: "unavailable", handle: h });
+      }
+    }, 600);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [rawHandle]);
+  return state;
+}
+
+function IgAvatar({ p }: { p: IgProfile }) {
+  const [broken, setBroken] = useState(false);
+  if (p.avatarUrl && !broken) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={p.avatarUrl} alt="" onError={() => setBroken(true)} className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white" />;
+  }
+  return (
+    <div className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-app-ink text-lg font-semibold text-white">
+      {(p.fullName || p.handle)[0]?.toUpperCase()}
+    </div>
+  );
+}
+
+function InstagramPreview({ preview }: { preview: IgPreview }) {
+  if (preview.status === "idle") return null;
+  if (preview.status === "loading")
+    return (
+      <div className="mt-2 flex items-center gap-3 rounded-2xl border border-app-line p-3" aria-live="polite">
+        <div className="h-14 w-14 shrink-0 rounded-full skeleton" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 w-32 skeleton" />
+          <div className="h-3 w-48 skeleton" />
+        </div>
+        <span className="sr-only">Looking up @{preview.handle}</span>
+      </div>
+    );
+  if (preview.status === "found") {
+    const p = preview.profile;
+    const stats = [
+      p.followers !== undefined && `${compactCount(p.followers)} followers`,
+      p.posts !== undefined && `${compactCount(p.posts)} posts`,
+      p.following !== undefined && `${compactCount(p.following)} following`,
+    ].filter(Boolean);
+    return (
+      <div className="rise mt-2 overflow-hidden rounded-2xl border border-app-line" aria-live="polite">
+        <div className="flex gap-3 p-3">
+          <IgAvatar p={p} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] leading-tight font-semibold">{p.fullName || `@${p.handle}`}</p>
+            <p className="truncate text-[13px] text-app-muted">@{p.handle}</p>
+            {stats.length > 0 && <p className="mt-1 text-[13px] font-medium">{stats.join(" · ")}</p>}
+          </div>
+        </div>
+        {p.bio && <p className="line-clamp-2 px-3 pb-3 text-[13.5px] leading-snug whitespace-pre-line text-app-ink/80">{p.bio}</p>}
+        <p
+          className={`px-3 py-2 text-[13px] font-medium ${
+            p.isPrivate ? "bg-app-warn-bg text-app-warn-ink" : "bg-app-mint text-[#00714c]"
+          }`}
+        >
+          {p.isPrivate
+            ? "🔒 Private account: we can see your name and followers only. Add a line about what you create below."
+            : "✓ Found you! We'll use this profile to build your store."}
+        </p>
+      </div>
+    );
+  }
+  const msg = {
+    invalid: "Handles use only letters, numbers, dots and underscores.",
+    not_found: `No Instagram account called @${preview.handle}. Check the spelling, or just describe yourself below.`,
+    unavailable: "Couldn't reach Instagram right now. Add a line about yourself below and we'll still build your store.",
+  }[preview.status];
+  return <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{msg}</p>;
+}
+
 /* ---------------- Input screen ---------------- */
 
 const STEPS = [
@@ -601,6 +722,7 @@ function InputScreen(props: {
 }) {
   const { handle, setHandle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved } = props;
   const canSubmit = handle.trim() || description.trim();
+  const ig = useInstagramPreview(handle);
   return (
     <main className="min-h-dvh overflow-x-clip bg-app-tint">
       {/* Dark hero band. On mobile the form card hangs over its bottom edge; on desktop it sits beside the headline. */}
@@ -699,7 +821,11 @@ function InputScreen(props: {
                       className="min-h-13 w-full bg-transparent px-1 text-[17px] outline-none"
                     />
                   </div>
-                  {handleMsg && <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{handleMsg}</p>}
+                  {handleMsg ? (
+                    <p className="rise mt-2 rounded-xl bg-app-warn-bg px-3 py-2 text-sm text-app-warn-ink">{handleMsg}</p>
+                  ) : (
+                    <InstagramPreview preview={ig} />
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3 text-[11px] font-semibold tracking-[0.18em] text-app-muted uppercase">
@@ -709,6 +835,9 @@ function InputScreen(props: {
                 <div>
                   <label htmlFor="desc" className="text-[15px] font-semibold">
                     What do you create, and for whom?
+                    {ig.status === "found" && !ig.profile.isPrivate && (
+                      <span className="font-normal text-app-muted"> (optional)</span>
+                    )}
                   </label>
                   {question && (
                     <p className="rise mt-2 rounded-2xl rounded-bl-sm bg-app-accent px-4 py-2.5 text-sm text-white">💬 {question}</p>

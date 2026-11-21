@@ -145,7 +145,8 @@ export function toStorefront(
     .map((p) => finalizeProduct(p, ctx.followers))
     .sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier] || a.priceInr - b.priceInr);
   return {
-    displayName: out.displayName.trim() || ctx.fullName || (ctx.handle ? `@${ctx.handle}` : "Creator"),
+    // A verified Instagram name beats anything the model writes.
+    displayName: ctx.fullName?.trim() || out.displayName.trim() || (ctx.handle ? `@${ctx.handle}` : "Creator"),
     handle: ctx.handle,
     avatarUrl: ctx.avatarUrl,
     followers: ctx.followers,
