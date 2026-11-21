@@ -934,10 +934,6 @@ function InputScreen(props: {
                   )}
                 </div>
 
-                <div className="flex items-center gap-3 text-[11px] font-semibold tracking-[0.18em] text-app-muted uppercase">
-                  <span className="h-px flex-1 bg-app-line" /> and / or <span className="h-px flex-1 bg-app-line" />
-                </div>
-
                 <div>
                   <label htmlFor="desc" className="text-[15px] font-semibold">
                     What do you create, and for whom?
