@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import StorefrontView, { compactCount, safeTheme } from "./StorefrontView";
 import Sheet from "./Sheet";
+import { suggestOneLiners } from "@/lib/oneLiners";
 import { formatInr, priceBand } from "@/lib/pricing";
 import {
   ATTACHMENT_TYPES,
@@ -901,6 +902,12 @@ function InputScreen(props: {
   const { handle, setHandle, description, setDescription, language, setLanguage, handleMsg, question, descRef, saved } = props;
   const canSubmit = handle.trim() || description.trim();
   const ig = props.ig;
+  // One-liner ideas from the username (and public bio once loaded). Only when a valid handle is typed.
+  const cleanHandle = handle.trim().replace(/^@+/, "");
+  const oneLiners =
+    cleanHandle && ig.status !== "invalid"
+      ? suggestOneLiners(cleanHandle, ig.status === "found" ? ig.profile : undefined)
+      : null;
   return (
     <main className="min-h-dvh overflow-x-clip bg-app-tint">
       {/* Dark hero band. On mobile the form card hangs over its bottom edge; on desktop it sits beside the headline. */}
@@ -1026,18 +1033,48 @@ function InputScreen(props: {
                     placeholder="e.g. I'm a dietitian in Pune. I share easy veg recipes for weight loss."
                     className="mt-1.5 w-full resize-none rounded-2xl border border-app-line bg-app-tint px-4 py-3 text-[16px] leading-relaxed outline-none focus:border-app-accent focus:bg-app-surface"
                   />
-                  <div className="-mx-5 mt-2 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
-                    {EXAMPLES.map((ex) => (
-                      <button
-                        type="button"
-                        key={ex}
-                        onClick={() => setDescription(ex)}
-                        className="shrink-0 rounded-full border border-app-line bg-app-surface px-3.5 py-1.5 text-[13px] text-app-ink transition hover:border-app-accent hover:text-app-accent active:bg-app-tint"
-                      >
-                        {ex}
-                      </button>
-                    ))}
-                  </div>
+                  {oneLiners ? (
+                    <div className="mt-2.5" aria-live="polite">
+                      <p className="text-[12.5px] font-semibold text-app-muted">
+                        {oneLiners.from === "username"
+                          ? `💡 Suggested for a ${oneLiners.niche} page. Tap one, then edit:`
+                          : oneLiners.from === "profile"
+                            ? `💡 Based on your Instagram bio (${oneLiners.niche}). Tap one, then edit:`
+                            : "💡 Not sure what to write? Start with one of these and edit:"}
+                      </p>
+                      <div className="mt-1.5 grid gap-1.5">
+                        {oneLiners.lines.map((line) => {
+                          const on = description === line;
+                          return (
+                            <button
+                              type="button"
+                              key={line}
+                              onClick={() => setDescription(line)}
+                              className={`rounded-2xl border px-3.5 py-2 text-left text-[13.5px] leading-snug transition ${
+                                on ? "border-app-accent bg-app-sky text-app-ink" : "border-app-line bg-app-surface text-app-ink hover:border-app-accent"
+                              }`}
+                            >
+                              {on ? "✓ " : ""}
+                              {line}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="-mx-5 mt-2 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none] lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
+                      {EXAMPLES.map((ex) => (
+                        <button
+                          type="button"
+                          key={ex}
+                          onClick={() => setDescription(ex)}
+                          className="shrink-0 rounded-full border border-app-line bg-app-surface px-3.5 py-1.5 text-[13px] text-app-ink transition hover:border-app-accent hover:text-app-accent active:bg-app-tint"
+                        >
+                          {ex}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>
